@@ -63,9 +63,7 @@ trait ToolBoxes extends { self: Universe =>
         minfo.decls enter meth
         trace("wrapping ")(defOwner(expr) -> meth)
         val methdef = DefDef(meth, expr changeOwner (defOwner(expr) -> meth))
-        trace("wrapped: ")(showAttributed(methdef))
-        resetAllAttrs(
-          ModuleDef(
+        val moduledef = ModuleDef(
             obj,
             Template(
                 List(TypeTree(ObjectClass.tpe)),
@@ -74,7 +72,11 @@ trait ToolBoxes extends { self: Universe =>
                 List(),
                 List(List()),
                 List(methdef),
-                NoPosition)))
+                NoPosition))
+        trace("wrapped: ")(showAttributed(moduledef))
+        val cleanedUp = resetLocalAttrs(moduledef)
+        trace("cleaned up: ")(showAttributed(cleanedUp))
+        cleanedUp
       }
 
       def wrapInPackage(clazz: Tree): PackageDef =
@@ -88,7 +90,7 @@ trait ToolBoxes extends { self: Universe =>
 
       def compileExpr(expr: Tree, fvs: List[Symbol]): String = {
         val mdef = wrapInObject(expr, fvs)
-        val pdef = trace("wrapped: ")(wrapInPackage(mdef))
+        val pdef = wrapInPackage(mdef)
         val unit = wrapInCompilationUnit(pdef)
         val run = new Run
         run.compileUnits(List(unit), run.namerPhase)
@@ -122,13 +124,16 @@ trait ToolBoxes extends { self: Universe =>
       }
       
       def showAttributed(tree: Tree): String = {
-        val saved = settings.printtypes.value
+        val saved1 = settings.printtypes.value
+        val saved2 = settings.uniqid.value
         try {
           settings.printtypes.value = true
-          //settings.uniqid.value = true
+          settings.uniqid.value = true
           tree.toString
-        } finally
-          compiler.settings.printtypes.value = saved
+        } finally {
+          compiler.settings.printtypes.value = saved1
+          compiler.settings.uniqid.value = saved2
+        }
       }
     }
 

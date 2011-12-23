@@ -29,7 +29,7 @@ trait TreePrinters extends api.TreePrinters { self: SymbolTable =>
    */
   def backquotedPath(t: Tree): String = t match {
     case Select(qual, name) => "%s.%s".format(backquotedPath(qual), quotedName(name))
-    case Ident(name)        => quotedName(name)
+    case Ident(name)        => quotedName(name) + (if (t.hasSymbol && settings.uniqid.value) "#"+t.symbol.id else "")
     case _                  => t.toString
   }
 

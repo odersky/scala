@@ -266,19 +266,21 @@ trait Trees extends reflect.internal.Trees { self: Global =>
           tree.tpe = null
           tree
         case tpt: TypeTree =>
-          if (tpt.original != null)
-            tpt.original
-          else if (tpt.tpe != null && (tpt.wasEmpty || (tpt.tpe exists (tp => erasedSyms contains tp.typeSymbol))))
-            tpt.tpe = null
-          tree
+          if (tpt.original != null) {
+            transform(tpt.original)
+          } else {
+            if (tpt.tpe != null && (tpt.wasEmpty || (tpt.tpe exists (tp => erasedSyms contains tp.typeSymbol))))
+              tpt.tpe = null
+            tree
+          }
         case TypeApply(fn, args) if args map transform exists (_.isEmpty) =>
-          fn
+          transform(fn)
         case This(_) if tree.symbol != null && tree.symbol.isPackageClass =>
           tree
         case EmptyTree =>
           tree
         case _ =>
-          if (tree.hasSymbol && (!localOnly || (erasedSyms contains tree.symbol))) 
+          if (tree.hasSymbol && (!localOnly || (erasedSyms contains tree.symbol)))
             tree.symbol = NoSymbol
           tree.tpe = null
           tree
