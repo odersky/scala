@@ -249,19 +249,26 @@ trait Trees extends reflect.internal.Trees { self: Global =>
    */
   private class ResetAttrsTransformer(localOnly: Boolean) extends Transformer {
     private val erasedSyms = util.HashSet[Symbol](8)
-    private def resetDef(tree: Tree) {
+    private def resetDef(tree: Tree) = {
       if (tree.symbol != null && tree.symbol != NoSymbol)
         erasedSyms addEntry tree.symbol
       tree.symbol = NoSymbol
     }
+    def resetDefs(stats: List[Tree]) = 
+      for (stat <- stats)
+        if (stat.isDef) resetDef(stat)
     override def transform(tree: Tree): Tree = super.transform {
       tree match {
         case Template(_, _, body) =>
-          body foreach resetDef
+          resetDefs(body)
           resetDef(tree)
           tree.tpe = null
           tree
-        case _: DefTree | Function(_, _) | Template(_, _, _) =>
+        case Block(stats, _) =>
+          resetDefs(stats)
+          tree.tpe = null
+          tree
+        case _: DefTree | Function(_, _) =>
           resetDef(tree)
           tree.tpe = null
           tree
