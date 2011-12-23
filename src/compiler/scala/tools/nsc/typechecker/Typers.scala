@@ -2836,7 +2836,7 @@ trait Typers extends Modes with Adaptations with PatMatVirtualiser {
       existentialAbstraction(captured.toList, tpe)
     }
 
-    /** convert skolems to existentials */
+    /** convert local symbols and skolems to existentials */
     def packedType(tree: Tree, owner: Symbol): Type = {
       def defines(tree: Tree, sym: Symbol) =
         sym.isExistentialSkolem && sym.unpackLocation == tree ||

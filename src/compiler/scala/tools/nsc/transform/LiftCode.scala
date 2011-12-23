@@ -164,7 +164,8 @@ abstract class LiftCode extends Transform with TypingTransformers {
       val targetType = definitions.CodeClass.primaryConstructor.info.paramTypes.head
       val reifier = new Reifier()
       val arg = gen.mkAsInstanceOf(reifier.reifyTopLevel(tree), targetType, wrapInApply = false)
-      val treetpe =
+      val treetpe = // this really should use packedType(tree.tpe, context.owner) 
+                    // where packedType is defined in Typers. But we can do that only if liftCode is moved to Typers.
         if (tree.tpe.typeSymbol.isAnonymousClass) tree.tpe.typeSymbol.classBound
         else tree.tpe
       New(TypeTree(appliedType(definitions.CodeClass.typeConstructor, List(treetpe.widen))),
