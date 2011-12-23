@@ -463,6 +463,14 @@ abstract class LiftCode extends Transform with TypingTransformers {
           reifyProductUnsafe(tpe)
       }
     }
+    
+    private def definedInLiftedCode(tpe: Type) = 
+      tpe exists (tp => boundSyms contains tp.typeSymbol)
+    
+    private def isErased(tree: Tree) = tree match {
+      case tt: TypeTree => definedInLiftedCode(tt.tpe) && tt.original == null
+      case _ => false
+    }
 
     /** Reify a tree */
     private def reifyTree(tree: Tree): Tree = tree match {
@@ -473,8 +481,7 @@ abstract class LiftCode extends Transform with TypingTransformers {
       case Ident(_) if !(boundSyms contains tree.symbol) =>
         reifyFree(tree)
       case tt: TypeTree if (tt.tpe != null) =>
-        val definedInLiftedCode = boundSyms exists (tt.tpe contains _)
-        if (definedInLiftedCode) {
+        if (definedInLiftedCode(tt.tpe)) {
           // erase non-essential (i.e. inferred) types
           // reify symless counterparts of essential types
           if (tt.original != null) reify(tt.original) else mirrorCall("TypeTree")
@@ -488,8 +495,7 @@ abstract class LiftCode extends Transform with TypingTransformers {
           rtt
         }
       case ta @ TypeApply(hk, ts) =>
-        val skip = ts map reify filterNot { _ equalsStructure mirrorCall("TypeTree") } isEmpty;
-        if (skip) reifyTree(hk) else reifyProduct(ta)
+        if (ts exists isErased) reifyTree(hk) else reifyProduct(ta)
       case global.emptyValDef =>
         mirrorSelect("emptyValDef")
       case _ =>
