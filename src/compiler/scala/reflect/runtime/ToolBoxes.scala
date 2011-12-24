@@ -118,12 +118,7 @@ trait ToolBoxes extends { self: Universe =>
         val jmeth = jclazz.getDeclaredMethods.find(_.getName == wrapperMethodName).get
         val jfield = jclazz.getDeclaredFields.find(_.getName == NameTransformer.MODULE_INSTANCE_NAME).get
         val singleton = jfield.get(null)
-        val result = jmeth.invoke(singleton, fvs map (sym => sym.asInstanceOf[FreeVar].value.asInstanceOf[AnyRef]): _*)
-        if (etpe.typeSymbol != FunctionClass(0)) result
-        else {
-          val applyMeth = result.getClass.getMethod("apply")
-          applyMeth.invoke(result)
-        }
+        jmeth.invoke(singleton, fvs map (sym => sym.asInstanceOf[FreeVar].value.asInstanceOf[AnyRef]): _*)
       }
 
       def showAttributed(tree: Tree): String = {
