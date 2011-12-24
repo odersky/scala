@@ -254,20 +254,15 @@ trait Trees extends reflect.internal.Trees { self: Global =>
       def markLocal(tree: Tree) = 
         if (tree.symbol != null && tree.symbol != NoSymbol)
           locals addEntry tree.symbol
-          
-      def isLocal(tree: Tree) = tree match {
-        case tree if tree.isDef =>
-          true
-        case Template(_, _, _) =>
-          true
-        case Function(_, _) =>
-          true
-        case _ =>
-          false
-      }
       
       override def traverse(tree: Tree) = {
-        if (isLocal(tree)) markLocal(tree)
+        tree match {
+         case _: DefTree | Function(_, _) | Template(_, _, _) => 
+           markLocal(tree)
+         case _ =>
+           ;
+        }
+        
         super.traverse(tree)
       }
     }

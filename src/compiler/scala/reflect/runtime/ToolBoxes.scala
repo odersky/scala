@@ -41,10 +41,13 @@ trait ToolBoxes extends { self: Universe =>
       private def isFree(t: Tree) = t.isInstanceOf[Ident] && t.symbol.isInstanceOf[FreeVar]
 
       def typedTopLevelExpr(tree: Tree, pt: Type): Tree = {
+        trace("typing as %s: ".format(pt.toString))(showAttributed(tree))
         val ownerClass = EmptyPackageClass.newClass(newTypeName("<expression-owner>"))
         ownerClass.setInfo(new ClassInfoType(List(ObjectClass.tpe), newScope, ownerClass))
         val owner = ownerClass.newLocalDummy(tree.pos)
-        typer.atOwner(tree, owner).typed(tree, analyzer.EXPRmode, pt)
+        val ttree = typer.atOwner(tree, owner).typed(tree, analyzer.EXPRmode, pt)
+        trace("typed: ")(showAttributed(ttree))
+        ttree
       }
 
       def defOwner(tree: Tree): Symbol = tree find (_.isDef) map (_.symbol) match {
@@ -172,9 +175,7 @@ trait ToolBoxes extends { self: Universe =>
       val ctree: compiler.Tree = importer.importTree(tree.asInstanceOf[Tree])
       val pt: compiler.Type = importer.importType(expectedType.asInstanceOf[Type])
 //      val typer = compiler.typer.atOwner(ctree, if (owner.isModule) cowner.moduleClass else cowner)
-      trace("typing: ")(compiler.showAttributed(ctree))
       val ttree: compiler.Tree = compiler.typedTopLevelExpr(ctree, pt)
-      trace("typed: ")(compiler.showAttributed(ttree))
       ttree
     }
 
