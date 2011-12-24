@@ -46,12 +46,12 @@ trait ToolBoxes extends { self: Universe =>
         val owner = ownerClass.newLocalDummy(tree.pos)
         typer.atOwner(tree, owner).typed(tree, analyzer.EXPRmode, pt)
       }
-      
+
       def defOwner(tree: Tree): Symbol = tree find (_.isDef) map (_.symbol) match {
         case Some(sym) if sym != null && sym != NoSymbol => sym.owner
         case _ => NoSymbol
       }
-    
+
       def wrapInObject(expr: Tree, fvs: List[Symbol]): ModuleDef = {
         val obj = EmptyPackageClass.newModule(NoPosition, nextWrapperModuleName())
         val minfo = ClassInfoType(List(ObjectClass.tpe, ScalaObjectClass.tpe), new Scope, obj.moduleClass)
@@ -103,13 +103,13 @@ trait ToolBoxes extends { self: Universe =>
       def runExpr(expr: Tree): Any = {
         val etpe = expr.tpe
         val fvs = (expr filter isFree map (_.symbol)).distinct
-        
+
         reporter.reset()
         val className = compileExpr(expr, fvs)
         if (reporter.hasErrors) {
           throw new Error("reflective compilation has failed")
         }
-        
+
         if (settings.debug.value) println("generated: "+className)
         val jclazz = jClass.forName(moduleFileName(className), true, classLoader)
         val jmeth = jclazz.getDeclaredMethods.find(_.getName == wrapperMethodName).get
@@ -122,7 +122,7 @@ trait ToolBoxes extends { self: Universe =>
           applyMeth.invoke(result)
         }
       }
-      
+
       def showAttributed(tree: Tree): String = {
         val saved1 = settings.printtypes.value
         val saved2 = settings.uniqid.value
@@ -163,7 +163,7 @@ trait ToolBoxes extends { self: Universe =>
     lazy val exporter = importer.reverse
 
     lazy val classLoader = new AbstractFileClassLoader(virtualDirectory, defaultReflectiveClassLoader)
-    
+
     private def importAndTypeCheck(tree: rm.Tree, expectedType: rm.Type): compiler.Tree = {
       // need to establish a run an phase because otherwise we run into an assertion in TypeHistory
       // that states that the period must be different from NoPeriod
@@ -172,7 +172,9 @@ trait ToolBoxes extends { self: Universe =>
       val ctree: compiler.Tree = importer.importTree(tree.asInstanceOf[Tree])
       val pt: compiler.Type = importer.importType(expectedType.asInstanceOf[Type])
 //      val typer = compiler.typer.atOwner(ctree, if (owner.isModule) cowner.moduleClass else cowner)
+      trace("typing: ")(compiler.showAttributed(ctree))
       val ttree: compiler.Tree = compiler.typedTopLevelExpr(ctree, pt)
+      trace("typed: ")(compiler.showAttributed(ttree))
       ttree
     }
 
@@ -185,7 +187,7 @@ trait ToolBoxes extends { self: Universe =>
     def typeCheck(tree: rm.Tree): rm.Tree =
       typeCheck(tree, WildcardType.asInstanceOf[rm.Type])
 
-    def showAttributed(tree: rm.Tree): String = 
+    def showAttributed(tree: rm.Tree): String =
       compiler.showAttributed(importer.importTree(tree.asInstanceOf[Tree]))
 
     def runExpr(tree: rm.Tree, expectedType: rm.Type): Any = {
