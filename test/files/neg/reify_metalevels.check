@@ -1,0 +1,19 @@
+reify_metalevels.scala:10: error: cannot splice at metalevel 0
+  val eight1 = splice(four) + splice(four)
+                     ^
+reify_metalevels.scala:11: error: cannot splice at metalevel 0
+  val eight2 = usplice(four) + usplice(four)
+                      ^
+reify_metalevels.scala:4: error: cannot lift at metalevel 1
+  def tt = lift{lift{2}}
+                    ^
+reify_metalevels.scala:5: error: cannot lift at metalevel 1
+  def tu = lift{ulift{2}}
+                     ^
+reify_metalevels.scala:6: error: cannot lift at metalevel 1
+  def ut = ulift{lift{2}}
+                     ^
+reify_metalevels.scala:7: error: cannot lift at metalevel 1
+  def uu = ulift{ulift{2}}
+                      ^
+6 errors found

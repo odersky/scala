@@ -71,7 +71,16 @@ abstract class LiftCode extends Transform with TypingTransformers {
         case mod => mod.toString
       }
 
-      for (line <- (tree.toString.split(Properties.lineSeparator) drop 2 dropRight 1)) {
+      var lines = tree.toString.split(Properties.lineSeparator)
+      var head = lines.head
+      head = head.substring(head.indexOf("(") + 1)
+      lines = head +: (lines drop 1)
+      if (lines.head == "{") lines = lines drop 1
+      if (lines.head.contains("$mr")) lines = lines drop 1
+      if (lines.last.startsWith("}.asInstanceOf[reflect.mirror.Tree])")) lines = lines dropRight 1
+      else lines = (lines dropRight 1) :+ lines.last.substring(0, lines.last.indexOf(")"))
+      
+      for (line <- lines) {
         var s = line.trim
         s = s.replace("$mr.", "")
         s = s.replace(".apply", "")
@@ -125,16 +134,42 @@ abstract class LiftCode extends Transform with TypingTransformers {
     }
 
     override def transform(tree: Tree): Tree = {
+      val tree0 = tree
       val sym = tree.symbol
       tree match {
-        case Apply(_, List(tree)) if sym == Code_lift => // reify Code.lift[T](expr) instances
+        case Apply(TypeApply(_, List(tpt: TypeTree)), List(ucode)) if sym.isCodeTyped => // reify top-level Code.typed[T]
+                                                        // other references to typed are processed by the reifier
+          val targetType = definitions.CodeClass.primaryConstructor.info.paramTypes.head
+          val core1 = Select(ucode, newTermName("tree"))
+          val untyped1 = New(TypeTree(appliedType(CodeClass.typeConstructor, List(tpt.tpe))), List(List(core1)))
+          if (reifyCopypaste) printCopypaste(untyped1)
+          val typed1 = localTyper.typedPos(tree.pos)(untyped1)
+          typed1
+        case Apply(_, List(tree)) if sym.isLift => // reify Code.lift[T], Code.ulift and Ucode.lift 
           val saved = printTypings
           try {
             printTypings = reifyDebug
             debugTrace("transformed = ") {
-              val result = localTyper.typedPos(tree.pos)(codify(super.transform(tree)))
-              if (reifyCopypaste) printCopypaste(result)
-              result
+              val untyped = codify(super.transform(tree))
+              if (reifyCopypaste) printCopypaste(untyped)
+              
+              val typed = localTyper.typedPos(tree.pos)(untyped)
+              assert(typed.tpe.typeSymbol == CodeClass)
+              val tpe = typed.tpe.typeArgs(0).typeSymbol
+              
+              if (tpe.isMagic) {
+                if (sym.isTypedLift) {
+                  unit.error(tree0.pos, "cannot use untyped splices inside a typed lift (consider using Code.ulift instead of Code.lift)")
+                  typed
+                } else {
+                  val Apply(Apply(_, List(lifted)), _) = typed
+                  val untyped1 = New(TypeTree(UcodeClass.tpe), List(List(lifted)))
+                  val typed1 = localTyper.typedPos(tree.pos)(untyped1)
+                  typed1
+                }
+              } else {
+                typed
+              }
             }
           } finally printTypings = saved
         case ValDef(mods, name, tpt, rhs) if (freeMutableVars(sym)) => // box mutable variables that are accessed from a local closure
@@ -497,6 +532,19 @@ abstract class LiftCode extends Transform with TypingTransformers {
         }
       case ta @ TypeApply(hk, ts) =>
         if (ts exists isErased) reifyTree(hk) else reifyProduct(ta)
+      // todo. spliced code can only contain a reference to a tree or an invocation of lift or typed
+      // to fix that we need a disciplined approach to lifting splices, not the hack that is there right now
+      // a major challenge here is making sure that code inside a splice (metalevel 0) does not reference symbols from metalevel 1 (surrounding lift)
+      case Apply(fun, args) if fun.symbol.isSplice =>
+        import scala.reflect.{mirror => rm}
+        val splicee = args(0) match {
+          case Apply(fun, args) if fun.symbol.isLift => args(0)
+          case Apply(fun, args) if fun.symbol.isCodeTyped => args(0)
+          case splicee @ _ => splicee
+        }
+        val spliced = Select(splicee, newTermName("tree"))
+        val rmTree = Select(Ident(newTermName(mirrorShortName)), newTypeName("Tree")) 
+        TypeApply(Select(spliced, newTermName("asInstanceOf")), List(rmTree))
       case global.emptyValDef =>
         mirrorSelect("emptyValDef")
       case _ =>

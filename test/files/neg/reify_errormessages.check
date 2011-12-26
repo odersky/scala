@@ -1,0 +1,58 @@
+reify_errormessages.scala:5: error: not found: value thereisnosuchsymbol
+  def e0 = lift{splice{thereisnosuchsymbol}}
+                       ^
+reify_errormessages.scala:6: error: overloaded method value * with alternatives:
+  (x: Double)Double <and>
+  (x: Float)Float <and>
+  (x: Long)Long <and>
+  (x: Int)Int <and>
+  (x: Char)Int <and>
+  (x: Short)Int <and>
+  (x: Byte)Int
+ cannot be applied to (String)
+  def e1 = lift{2 * "foobar"}
+                  ^
+reify_errormessages.scala:7: error: overloaded method value * with alternatives:
+  (x: Double)Double <and>
+  (x: Float)Float <and>
+  (x: Long)Long <and>
+  (x: Int)Int <and>
+  (x: Char)Int <and>
+  (x: Short)Int <and>
+  (x: Byte)Int
+ cannot be applied to (String)
+  def e2 = lift{2 * splice{lift{"foobar"}}}
+                  ^
+reify_errormessages.scala:9: error: overloaded method value * with alternatives:
+  (x: Double)Double <and>
+  (x: Float)Float <and>
+  (x: Long)Long <and>
+  (x: Int)Int <and>
+  (x: Char)Int <and>
+  (x: Short)Int <and>
+  (x: Byte)Int
+ cannot be applied to (String)
+  def e4 = ulift{2 * "foobar"}
+                   ^
+reify_errormessages.scala:10: error: overloaded method value * with alternatives:
+  (x: Double)Double <and>
+  (x: Float)Float <and>
+  (x: Long)Long <and>
+  (x: Int)Int <and>
+  (x: Char)Int <and>
+  (x: Short)Int <and>
+  (x: Byte)Int
+ cannot be applied to (String)
+  def e5 = ulift{2 * splice{lift{"foobar"}}}
+                   ^
+reify_errormessages.scala:12: error: type mismatch;
+ found   : String("x")
+ required: Int
+  def e7 = ({x: Code[Int]} => x)("x")
+                                 ^
+reify_errormessages.scala:13: error: type mismatch;
+ found   : String("x")
+ required: Int
+  def e8: Code[Int] = "x"
+                      ^
+7 errors found

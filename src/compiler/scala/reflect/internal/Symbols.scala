@@ -617,6 +617,18 @@ trait Symbols extends api.Symbols { self: SymbolTable =>
     final def isStructuralRefinementMember = owner.isStructuralRefinement && isPossibleInRefinement && isPublic
     final def isPossibleInRefinement       = !isConstructor && !isOverridingSymbol
 
+    final def isCode = isTypedCode || isUntypedCode
+    final def isTypedCode = this isNonBottomSubClass CodeClass
+    final def isUntypedCode = this isNonBottomSubClass UcodeClass
+    final def isLift = isTypedLift || isUntypedLift
+    final def isTypedLift = this == Code_lift
+    final def isUntypedLift = this == Code_ulift || this == Ucode_lift
+    final def isSplice = isTypedSplice || isUntypedSplice
+    final def isTypedSplice = this == Code_splice
+    final def isUntypedSplice = this == Code_usplice || this == Ucode_splice
+    final def isCodeTyped = this == Code_typed
+    final def isMagic = this.tpe != null && (tpe.contains(MagicClass) || tpe.contains(MagicObject))
+
     /** Is this symbol a member of class `clazz`? */
     def isMemberOf(clazz: Symbol) =
       clazz.info.member(name).alternatives contains this

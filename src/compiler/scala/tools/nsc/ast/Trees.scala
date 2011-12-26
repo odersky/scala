@@ -275,7 +275,7 @@ trait Trees extends reflect.internal.Trees { self: Global =>
             if (tpt.original != null) {
               transform(tpt.original)
             } else {
-              if (tpt.tpe != null && (tpt.wasEmpty || (tpt.tpe exists (tp => locals contains tp.typeSymbol))))
+              if (tpt.tpe != null && (tpt.wasEmpty || (tpt.tpe exists (tp => (locals contains tp.typeSymbol) || tp.typeSymbol.isMagic))))
                 tpt.tpe = null
               tree
             }
@@ -286,7 +286,7 @@ trait Trees extends reflect.internal.Trees { self: Global =>
           case EmptyTree =>
             tree
           case _ =>
-            if (tree.hasSymbol && (!localOnly || (locals contains tree.symbol)))
+            if (tree.hasSymbol && (!localOnly || (locals contains tree.symbol) || tree.symbol.isMagic))
               tree.symbol = NoSymbol
             tree.tpe = null
             tree

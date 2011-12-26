@@ -270,6 +270,7 @@ trait StdNames extends /*reflect.generic.StdNames with*/ NameManglers { self: Sy
     val scala_ : NameType          = "scala"
     val self: NameType             = "self"
     val setAccessible: NameType    = "setAccessible"
+    val splice_ : NameType         = "splice"
     val synchronized_ : NameType   = "synchronized"
     val tail: NameType             = "tail"
     val this_ : NameType           = "this"
@@ -278,11 +279,15 @@ trait StdNames extends /*reflect.generic.StdNames with*/ NameManglers { self: Sy
     val toList: NameType           = "toList"
     val toSeq: NameType            = "toSeq"
     val toString_ : NameType       = if (forMSIL) "ToString" else "toString"
+    val tree_ : NameType           = "tree"
     val true_ : NameType           = "true"
+    val typed_ : NameType          = "typed"
+    val ulift_ : NameType          = "ulift"
     val unapply: NameType          = "unapply"
     val unapplySeq: NameType       = "unapplySeq"
     val unbox: NameType            = "unbox"
     val update: NameType           = "update"
+    val usplice_ : NameType        = "usplice"
     val value: NameType            = "value"
     val view_ : NameType           = "view"
     val wait_ : NameType           = "wait"
@@ -447,6 +452,8 @@ trait StdNames extends /*reflect.generic.StdNames with*/ NameManglers { self: Sy
     val BoxedNumber         : TypeName
     val Class               : TypeName
     val Code                : TypeName
+    val Ucode               : TypeName
+    val Magic               : TypeName
     val Delegate            : TypeName
     val IOOBException       : TypeName // IndexOutOfBoundsException
     val InvTargetException  : TypeName // InvocationTargetException
@@ -582,6 +589,8 @@ trait StdNames extends /*reflect.generic.StdNames with*/ NameManglers { self: Sy
     final val BoxedNumber: TypeName         = "System.IConvertible"
     final val Class: TypeName               = "System.Type"
     final val Code: TypeName                = tpnme.NO_NAME
+    final val Ucode: TypeName               = tpnme.NO_NAME
+    final val Magic: TypeName               = tpnme.NO_NAME
     final val Delegate: TypeName            = "System.MulticastDelegate"
     final val IOOBException: TypeName       = "System.IndexOutOfRangeException"
     final val InvTargetException: TypeName  = "System.Reflection.TargetInvocationException"
@@ -616,6 +625,8 @@ trait StdNames extends /*reflect.generic.StdNames with*/ NameManglers { self: Sy
     final val BeanProperty: TypeName        = "scala.beans.BeanProperty"
     final val BooleanBeanProperty: TypeName = "scala.beans.BooleanBeanProperty"
     final val Code: TypeName                = "scala.reflect.Code"
+    final val Ucode: TypeName               = "scala.reflect.Ucode"
+    final val Magic: TypeName               = "scala.reflect.Magic"
     final val JavaSerializable: TypeName    = "java.io.Serializable"
   }
 

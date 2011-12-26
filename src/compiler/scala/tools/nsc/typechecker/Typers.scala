@@ -680,8 +680,6 @@ trait Typers extends Modes with Adaptations with PatMatVirtualiser {
           }
       }
 
-    def isCodeType(tpe: Type) = tpe.typeSymbol isNonBottomSubClass CodeClass
-
     /** Perform the following adaptations of expression, pattern or type `tree` wrt to
      *  given mode `mode` and given prototype `pt`:
      *  (-1) For expressions with annotated types, let AnnotationCheckers decide what to do
@@ -975,6 +973,7 @@ trait Typers extends Modes with Adaptations with PatMatVirtualiser {
                   }
                 }
               }
+              
               if (settings.debug.value) {
                 log("error tree = " + tree)
                 if (settings.explaintypes.value) explainTypes(tree.tpe, pt)
@@ -1936,8 +1935,6 @@ trait Typers extends Modes with Adaptations with PatMatVirtualiser {
      */
     def typedFunction(fun: Function, mode: Int, pt: Type): Tree = {
       val numVparams = fun.vparams.length
-      val codeExpected = !forMSIL && (pt.typeSymbol isNonBottomSubClass CodeClass)
-
       if (numVparams > definitions.MaxFunctionArity)
         return errorTree(fun, "implementation restricts functions to " + definitions.MaxFunctionArity + " parameters")
 
@@ -1954,7 +1951,7 @@ trait Typers extends Modes with Adaptations with PatMatVirtualiser {
         else
           (FunctionClass(numVparams), fun.vparams map (x => NoType), WildcardType)
 
-      val (clazz, argpts, respt) = decompose(if (codeExpected) pt.normalize.typeArgs.head else pt)
+      val (clazz, argpts, respt) = decompose(pt)
 
       if (argpts.lengthCompare(numVparams) != 0)
         errorTree(fun, "wrong number of parameters; expected = " + argpts.length)
@@ -1965,7 +1962,7 @@ trait Typers extends Modes with Adaptations with PatMatVirtualiser {
               if (isFullyDefined(argpt)) argpt
               else {
                 fun match {
-                  case etaExpansion(vparams, fn, args) if !codeExpected =>
+                  case etaExpansion(vparams, fn, args) =>
                     silent(_.typed(fn, forFunMode(mode), pt)) match {
                       case fn1: Tree if context.undetparams.isEmpty =>
                         // if context,undetparams is not empty, the function was polymorphic,
@@ -1997,13 +1994,8 @@ trait Typers extends Modes with Adaptations with PatMatVirtualiser {
         val restpe = packedType(body, fun.symbol).deconst.resultType
         val funtpe = typeRef(clazz.tpe.prefix, clazz, formals :+ restpe)
 //        body = checkNoEscaping.locals(context.scope, restpe, body)
-        val fun1 = treeCopy.Function(fun, vparams, body).setType(funtpe)
-        if (codeExpected) lifted(fun1) else fun1
+        treeCopy.Function(fun, vparams, body).setType(funtpe)
       }
-    }
-
-    def lifted(tree: Tree): Tree = typedPos(tree.pos) {
-      Apply(Select(Ident(CodeModule), nme.lift_), List(tree))
     }
 
     def typedRefinement(stats: List[Tree]) {
@@ -2234,6 +2226,39 @@ trait Typers extends Modes with Adaptations with PatMatVirtualiser {
       def errTree = setError(treeCopy.Apply(tree, fun0, args))
       def errorTree(msg: String) = { error(tree.pos, msg); errTree }
 
+      // todo. is there a better place for this check?
+      // ideally, I'd like to have it merged with the lifting logic at the heart of def typed
+      if (fun0.symbol != null) {
+        if (fun0.symbol.isLift) {
+          if (context.metalevel == 0) {
+            val context1 = context.make(tree).atMetalevel(1)
+            val typer1 = newTyper(context1)
+            return typer1.typed(tree)
+          } else {
+            if (tree != context.tree)
+              return errorTree("cannot lift at metalevel " + context.metalevel)
+          }
+        } else if (fun0.symbol.isSplice) {
+          if (context.metalevel == 1) { 
+            val context1 = context.make(tree).atMetalevel(0)
+            val typer1 = newTyper(context1)
+            return typer1.typed(tree)
+          } else {
+            if (tree != context.tree)
+              return errorTree("cannot splice at metalevel " + context.metalevel)
+          }
+        }
+      }
+
+      if (fun0.tpe != null && fun0.tpe.typeSymbol.isMagic) {
+        val args1 = typedArgs(args, forArgMode(fun0, mode), args map {arg => MagicClass.tpe}, args map {arg => MagicClass.tpe})
+        val typed = treeCopy.Apply(tree, fun0, args1)
+        typed setType MagicClass.tpe
+        typed setSymbol MagicMethod
+        typed.fun setType MagicMethod.tpe
+        return typed
+      }
+
       var fun = fun0
       if (fun.hasSymbol && fun.symbol.isOverloaded) {
         // remove alternatives with wrong number of parameters without looking at types.
@@ -2295,6 +2320,12 @@ trait Typers extends Modes with Adaptations with PatMatVirtualiser {
               arg1
           }
           context.undetparams = undetparams
+          if ((args1 exists {arg => arg.tpe.typeSymbol.isMagic}) && !fun0.symbol.isLift) {
+            val typed = treeCopy.Apply(tree, fun, args1)
+            typed setType MagicClass.tpe
+            typed.fun setType MagicMethod.tpe
+            return typed
+          }
           inferMethodAlternative(fun, undetparams, argtpes.toList, pt, varArgsOnly = treeInfo.isWildcardStarArgList(args))
           doTypedApply(tree, adapt(fun, forFunMode(mode), WildcardType), args1, mode, pt)
 
@@ -2415,6 +2446,12 @@ trait Typers extends Modes with Adaptations with PatMatVirtualiser {
               // typedArg, it is recorded here.
               checkDead.updateExpr(fun)
               val args1 = typedArgs(args, forArgMode(fun, mode), paramTypes, formals)
+              if ((args1 exists {arg => arg.tpe.typeSymbol.isMagic}) && !fun0.symbol.isLift) {
+                val typed = treeCopy.Apply(tree, fun, args1)
+                typed setType MagicClass.tpe
+                typed.fun setType MagicMethod.tpe
+                return typed
+              }
               // instantiate dependent method types, must preserve singleton types where possible (stableTypeFor) -- example use case:
               // val foo = "foo"; def precise(x: String)(y: x.type): x.type = {...}; val bar : foo.type = precise(foo)(foo)
               // precise(foo) : foo.type => foo.type
@@ -2451,8 +2488,11 @@ trait Typers extends Modes with Adaptations with PatMatVirtualiser {
                */
               if (fun.symbol == List_apply && args.isEmpty && !forInteractive)
                 atPos(tree.pos)(gen.mkNil setType restpe)
-              else
-                constfold(treeCopy.Apply(tree, fun, args1) setType ifPatternSkipFormals(restpe))
+              else {
+                var result: Tree = treeCopy.Apply(tree, fun, args1) setType ifPatternSkipFormals(restpe)
+                if (context.metalevel == 0) result = constfold(result)
+                result
+              }
 
             } else if (needsInstantiation(tparams, formals, args)) {
               //println("needs inst "+fun+" "+tparams+"/"+(tparams map (_.info)))
@@ -3615,6 +3655,18 @@ trait Typers extends Modes with Adaptations with PatMatVirtualiser {
        *  @return     ...
        */
       def typedSelect(qual: Tree, name: Name): Tree = {
+        if (qual.tpe != null && qual.tpe.typeSymbol.isMagic) {
+          val typed = treeCopy.Select(tree, qual, name)
+          if ((mode & FUNmode) == FUNmode) {
+            typed setType MagicMethod.tpe
+            typed setSymbol MagicMethod
+          } else {
+            typed setType MagicObject.tpe
+            typed setSymbol MagicObject
+          }
+          return typed
+        }
+        
         val sym =
           if (tree.symbol != NoSymbol) {
             if (phase.erasedTypes && qual.isInstanceOf[Super])
@@ -4352,7 +4404,65 @@ trait Typers extends Modes with Adaptations with PatMatVirtualiser {
               "context.owner"    -> context.owner
             )
           )
-          val tree1 = typed1(tree, mode, dropExistential(pt))
+
+          val tree1 = {
+            val tree0 = tree // DEBUG
+            val pt0 = pt // DEBUG
+            if (!forMSIL && pt.typeSymbol.isCode) {
+              // attempt #1: leave as it is, for example:
+              // val x: Code[Int] = 2 * 5
+              // def u(a: Code[Int]): Code[Int] = a
+              // u(x)
+              val result1 = silent(_.typed1(tree, mode, dropExistential(pt))) match {
+                case result1: Tree =>
+                  val inferredTpe = result1.tpe.typeSymbol
+                  val doesntNeedLifting = inferredTpe.isCode
+                  if (doesntNeedLifting) Some(result1) else None
+                case ex: TypeError =>
+                  None
+              }
+              
+              // attempt #2: auto-lift, for example:
+              // val x: Code[Int] = 2 * 5
+              // val y = Code.lift{2 * 5} ====> this is processed elsewhere!
+              // val z = Code.lift[Int]{2 * 5} ====> this is processed elsewhere!
+              // val w: Code[Int] = Code.lift{2 * 5}
+              // def u(a: Code[Int]): Code[Int] = a;
+              // u(2 * 5)
+              val result2 = result1.getOrElse {
+                resetAllAttrs(tree)
+                
+                if (pt.typeSymbol.isTypedCode) {
+                  var generic_lift = Select(Ident(CodeModule), nme.lift_)
+                  var typed_lift = TypeApply(generic_lift, List(TypeTree(pt.typeArgs.head)))
+                  val lifted = Apply(typed_lift, List(tree))
+                  typed1(lifted, mode, dropExistential(pt))
+                } else {
+                  val lifted = Apply(Select(Ident(UcodeModule), nme.lift_), List(tree))
+                  // skipping typechecks of Ucode or not is a fundamental decision
+                  // pros of current decision (i.e. of not skipping):
+                  // * strongly-typed parts can be typechecked
+                  // * enables type-directed Ucode lifting (otherwise such simple stuff as "val x: Ucode = ..." wouldn't work)
+                  // cons of current decision:
+                  // * less expressive
+                  // neutrals:
+                  // * usplice can be supported in any case.
+                  // implementing it in skipping case requires zero effort (obviously)
+                  // implementing it in non-skipping case requires a magic type (see Code.scala)
+                  // that propagates through all typechecks and delineates typed code from non-typed one
+                  typed1(lifted, mode, dropExistential(pt))
+//                  lifted setSymbol UcodeClass
+//                  lifted setType UcodeClass.tpe
+//                  lifted
+                }
+              } 
+                
+              result2
+            } else {
+              typed1(tree, mode, dropExistential(pt))
+            }
+          }
+          
           printTyping("typed %s: %s%s".format(
             ptTree(tree1), tree1.tpe,
             if (isSingleType(tree1.tpe)) " with underlying "+tree1.tpe.widen else "")

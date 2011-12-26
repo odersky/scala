@@ -124,6 +124,13 @@ trait Contexts { self: Analyzer =>
     var checking = false
     var retyping = false
 
+    var metalevel = 0 // default is zero, each lift increases metalevel, each splice decreases it
+                      // e.g. lift { ... <= metalevel 1 }
+                      // e.g. lift { splice { ... <= metalevel 0 } }
+                      // to put it differently, 0 => run-time values, 1 => compile-time values
+                      // no other levels are supported by our metaprogramming system
+    def atMetalevel(metalevel: Int): this.type = { this.metalevel = metalevel; this }
+    
     var savedTypeBounds: List[(Symbol, Type)] = List() // saved type bounds
        // for type parameters which are narrowed in a GADT
 
@@ -194,6 +201,7 @@ trait Contexts { self: Analyzer =>
       c.implicitsEnabled = this.implicitsEnabled
       c.checking = this.checking
       c.retyping = this.retyping
+      c.metalevel = this.metalevel
       c.openImplicits = this.openImplicits
       registerContext(c.asInstanceOf[analyzer.Context])
       debuglog("[context] ++ " + c.unit + " / " + tree.summaryString)

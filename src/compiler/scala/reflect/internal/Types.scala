@@ -4980,6 +4980,7 @@ A type's typeSymbol should never be inspected directly.
 
   /** Does type `tp1` conform to `tp2`? */
   private def isSubType2(tp1: Type, tp2: Type, depth: Int): Boolean = {
+    if (tp2.typeSymbol.isMagic) return true
     if ((tp1 eq tp2) || isErrorOrWildcard(tp1) || isErrorOrWildcard(tp2)) return true
     if ((tp1 eq NoType) || (tp2 eq NoType)) return false
     if (tp1 eq NoPrefix) return (tp2 eq NoPrefix) || tp2.typeSymbol.isPackageClass

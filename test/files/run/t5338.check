@@ -1,0 +1,10 @@
+2.$times(5)
+2.$times(5)
+2.$times(5)
+2.$times(5)
+2.$times(5)
+{
+  def x: Int = 2.$times(5);
+  ()
+}
+((x: Int) => x.$plus(ys.length).$plus(2.$times(5)))

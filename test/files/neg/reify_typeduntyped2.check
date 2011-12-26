@@ -1,0 +1,4 @@
+reify_typeduntyped2.scala:5: error: cannot use untyped splices inside a typed lift (consider using Code.ulift instead of Code.lift)
+  def four = lift{usplice(two) + usplice(two)}
+                 ^
+one error found

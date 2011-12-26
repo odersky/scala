@@ -1,0 +1,6 @@
+reify_typeduntyped1.scala:5: error: type mismatch;
+ found   : scala.reflect.Ucode
+ required: scala.reflect.Code[?]
+  def four = ulift{splice(two) + usplice(two)}
+                          ^
+one error found
