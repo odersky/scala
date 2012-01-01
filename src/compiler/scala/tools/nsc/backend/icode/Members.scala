@@ -24,9 +24,8 @@ trait Members { self: ICodes =>
    * This class represents the intermediate code of a method or
    * other multi-block piece of code, like exception handlers.
    */
-  class Code(label: String, method: IMethod) {
-    def this(method: IMethod) = this(method.symbol.simpleName.toString, method)
-
+  class Code(method: IMethod) {
+    private[this] val name = method.symbol.decodedName.toString.intern
     /** The set of all blocks */
     val blocks = mutable.ListBuffer[BasicBlock]()
 
@@ -73,7 +72,7 @@ trait Members { self: ICodes =>
     }
 
     /** This methods returns a string representation of the ICode */
-    override def toString() : String = "ICode '" + label + "'";
+    override def toString = "ICode '" + name + "'";
 
     /* Compute a unique new label */
     def nextLabel: Int = {

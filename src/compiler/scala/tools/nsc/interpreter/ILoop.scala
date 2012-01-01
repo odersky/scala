@@ -11,6 +11,7 @@ import java.io.{ BufferedReader, FileReader }
 import java.util.concurrent.locks.ReentrantLock
 import scala.sys.process.Process
 import session._
+import scala.util.Properties.{ jdkHome, javaVersion }
 import scala.tools.util.{ Signallable, Javap }
 import scala.annotation.tailrec
 import scala.collection.mutable.ListBuffer
@@ -51,7 +52,7 @@ class ILoop(in0: Option[BufferedReader], protected val out: JPrintWriter)
     intp.reporter.printMessage(msg)
 
   def isAsync = !settings.Yreplsync.value
-  lazy val power = Power(this)
+  lazy val power = new Power(intp, new StdReplVals(this))
 
   // TODO
   // object opt extends AestheticSettings
@@ -253,6 +254,7 @@ class ILoop(in0: Option[BufferedReader], protected val out: JPrintWriter)
   /** Power user commands */
   lazy val powerCommands: List[LoopCommand] = List(
     nullary("dump", "displays a view of the interpreter's internal state", dumpCommand),
+    nullary("vals", "gives information about the power mode repl vals", valsCommand),
     cmd("phase", "<phase>", "set the implicit phase for power commands", phaseCommand),
     cmd("wrap", "<method>", "name of method to wrap around each repl line", wrapCommand) withLongHelp ("""
       |:wrap
@@ -283,6 +285,7 @@ class ILoop(in0: Option[BufferedReader], protected val out: JPrintWriter)
     history.asStrings takeRight 30 foreach echo
     in.redrawLine()
   }
+  private def valsCommand(): Result = power.valsDescription
 
   private val typeTransforms = List(
     "scala.collection.immutable." -> "immutable.",
@@ -375,14 +378,29 @@ class ILoop(in0: Option[BufferedReader], protected val out: JPrintWriter)
     }
   }
 
+  private def findToolsJar() = {
+    val jdkPath = Directory(jdkHome)
+    val jar     = jdkPath / "lib" / "tools.jar" toFile;
+    
+    if (jar isFile)
+      Some(jar)
+    else if (jdkPath.isDirectory)
+      jdkPath.deepFiles find (_.name == "tools.jar")
+    else None
+  }
   private def addToolsJarToLoader() = {
-    val javaHome = Directory(sys.env("JAVA_HOME"))
-    val tools    = javaHome / "lib" / "tools.jar"
-    if (tools.isFile) {
-      echo("Found tools.jar, adding for use by javap.")
-      ScalaClassLoader.fromURLs(Seq(tools.toURL), intp.classLoader)
+    val cl = findToolsJar match {
+      case Some(tools) => ScalaClassLoader.fromURLs(Seq(tools.toURL), intp.classLoader)
+      case _           => intp.classLoader
     }
-    else intp.classLoader
+    if (Javap.isAvailable(cl)) {
+      repldbg(":javap available.")
+      cl
+    }
+    else {
+      repldbg(":javap unavailable: no tools.jar at " + jdkHome)
+      intp.classLoader
+    }
   }
 
   protected def newJavap() = new JavapClass(addToolsJarToLoader(), new IMain.ReplStrippingWriter(intp)) {
@@ -429,14 +447,16 @@ class ILoop(in0: Option[BufferedReader], protected val out: JPrintWriter)
 
   private def javapCommand(line: String): Result = {
     if (javap == null)
-      return ":javap unavailable on this platform."
-    if (line == "")
-      return ":javap [-lcsvp] [path1 path2 ...]"
-
-    javap(words(line)) foreach { res =>
-      if (res.isError) return "Failed: " + res.value
-      else res.show()
-    }
+      ":javap unavailable, no tools.jar at %s.  Set JDK_HOME.".format(jdkHome)
+    else if (javaVersion startsWith "1.7")
+      ":javap not yet working with java 1.7"
+    else if (line == "")
+      ":javap [-lcsvp] [path1 path2 ...]"
+    else
+      javap(words(line)) foreach { res =>
+        if (res.isError) return "Failed: " + res.value
+        else res.show()
+      }
   }
   private def keybindingsCommand(): Result = {
     if (in.keyBindings.isEmpty) "Key bindings unavailable."
