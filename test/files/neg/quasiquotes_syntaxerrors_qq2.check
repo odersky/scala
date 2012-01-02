@@ -1,0 +1,31 @@
+quasiquotes_syntaxerrors_qq2.scala:2: error: invalid simple splice
+  println(s"$")
+            ^
+quasiquotes_syntaxerrors_qq2.scala:3: error: invalid simple splice
+  println(s"qwe$")
+               ^
+quasiquotes_syntaxerrors_qq2.scala:6: error: invalid simple splice
+  println(s"$2")
+            ^
+quasiquotes_syntaxerrors_qq2.scala:7: error: invalid simple splice
+  println(s"qwe$2")
+               ^
+quasiquotes_syntaxerrors_qq2.scala:8: error: invalid simple splice
+  println(s"$2  bar")
+            ^
+quasiquotes_syntaxerrors_qq2.scala:9: error: invalid simple splice
+  println(s"qwe$2 bar")
+               ^
+quasiquotes_syntaxerrors_qq2.scala:10: error: invalid simple splice
+  println(s"$22")
+            ^
+quasiquotes_syntaxerrors_qq2.scala:11: error: invalid simple splice
+  println(s"qwe$22")
+               ^
+quasiquotes_syntaxerrors_qq2.scala:12: error: invalid simple splice
+  println(s"$22 bar")
+            ^
+quasiquotes_syntaxerrors_qq2.scala:13: error: invalid simple splice
+  println(s"qwe$22 bar")
+               ^
+10 errors found

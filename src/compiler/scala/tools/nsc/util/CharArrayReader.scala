@@ -34,15 +34,23 @@ abstract class CharArrayReader { self =>
   /** Is last character a unicode escape \\uxxxx? */
   def isUnicodeEscape = charOffset == lastUnicodeOffset
 
-  /** Advance one character; reducing CR;LF pairs to just LF */
-  final def nextChar() {
+  /** Advance one character; reducing CR;LF pairs to just LF
+   * 
+   *  The `interpretUnicodeEscapes' parameter indicates whether 
+   *  the reader should ignore standard Unicode escapes or not.
+   *  Typically this parameter is set to `true', however,
+   *  when parsing quasiquotes, we reset it to `false', because
+   *  quasiquotes might incorporate external languages with
+   *  quite a different syntax / escaping scheme (e.g. regexes).
+   */
+  final def nextChar(interpretUnicodeEscapes: Boolean = true) {
     if (charOffset >= buf.length) {
       ch = SU
     } else {
       val c = buf(charOffset)
       ch = c
       charOffset += 1
-      if (c == '\\') potentialUnicode()
+      if (c == '\\' && interpretUnicodeEscapes) potentialUnicode()
       else if (c < ' ') { skipCR(); potentialLineEnd() }
     }
   }
@@ -50,15 +58,22 @@ abstract class CharArrayReader { self =>
   /** Advance one character, leaving CR;LF pairs intact.
    *  This is for use in multi-line strings, so there are no
    *  "potential line ends" here.
+   * 
+   *  The `interpretUnicodeEscapes' parameter indicates whether 
+   *  the reader should ignore standard Unicode escapes or not.
+   *  Typically this parameter is set to `true', however,
+   *  when parsing quasiquotes, we reset it to `false', because
+   *  quasiquotes might incorporate external languages with
+   *  quite a different syntax / escaping scheme (e.g. regexes).
    */
-  final def nextRawChar() {
+  final def nextRawChar(interpretUnicodeEscapes: Boolean = true) {
     if (charOffset >= buf.length) {
       ch = SU
     } else {
       val c = buf(charOffset)
       ch = c
       charOffset += 1
-      if (c == '\\') potentialUnicode()
+      if (c == '\\' && interpretUnicodeEscapes) potentialUnicode()
     }
   }
 

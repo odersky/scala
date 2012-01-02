@@ -1,0 +1,59 @@
+1st pack (6 elements)
+
+foo
+$foo
+${foo
+$foo}
+${foo}
+===================
+
+2nd pack (4 elements)
+aaabbb
+aaab
+abbb
+ab
+===================
+
+3rd pack (3 elements)
+ab
+abbb
+abbb
+===================
+
+4th pack (3 elements)
+aaab
+aaabbb
+aaabbb
+===================
+
+5th pack (3 elements)
+abbb
+aaabbb
+aaabbb
+===================
+
+6th pack (3 elements)
+ab
+aaab
+aaab
+===================
+
+7th pack (9 elements)
+ab
+abbb
+abbb
+aaab
+aaabbb
+aaabbb
+aaab
+aaabbb
+aaabbb
+===================
+
+8th pack (4 elements)
+class java.lang.String
+aaaclass java.lang.String
+class java.lang.Stringaaa
+class java.lang.Stringclass java.lang.String
+===================
+

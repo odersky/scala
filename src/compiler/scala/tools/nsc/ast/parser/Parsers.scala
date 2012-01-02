@@ -616,7 +616,7 @@ self =>
 
     def isLiteralToken(token: Int) = token match {
       case CHARLIT | INTLIT | LONGLIT | FLOATLIT | DOUBLELIT |
-           STRINGLIT | STRINGPART | SYMBOLLIT | TRUE | FALSE | NULL => true
+           STRINGLIT | SYMBOLLIT | TRUE | FALSE | NULL => true
       case _                                                        => false
     }
     def isLiteral = isLiteralToken(in.token)
@@ -624,7 +624,7 @@ self =>
     def isExprIntroToken(token: Int): Boolean = isLiteralToken(token) || (token match {
       case IDENTIFIER | BACKQUOTED_IDENT |
            THIS | SUPER | IF | FOR | NEW | USCORE | TRY | WHILE |
-           DO | RETURN | THROW | LPAREN | LBRACE | XMLSTART => true
+           DO | RETURN | THROW | LPAREN | LBRACE | XMLSTART | QUASIQUOTESTART => true
       case _ => false
     })
 
@@ -1109,8 +1109,6 @@ self =>
       }
       if (in.token == SYMBOLLIT)
         Apply(scalaDot(nme.Symbol), List(finish(in.strVal)))
-      else if (in.token == STRINGPART)
-        interpolatedString()
       else finish(in.token match {
         case CHARLIT               => in.charVal
         case INTLIT                => in.intVal(isNegated).toInt
@@ -1125,27 +1123,6 @@ self =>
           syntaxErrorOrIncomplete("illegal literal", true)
           null
       })
-    }
-
-    private def stringOp(t: Tree, op: TermName) = {
-      val str = in.strVal
-      in.nextToken()
-      if (str.length == 0) t
-      else atPos(t.pos.startOrPoint) {
-        Apply(Select(t, op), List(Literal(Constant(str))))
-      }
-    }
-
-    private def interpolatedString(): Tree = {
-      var t = atPos(o2p(in.offset))(New(TypeTree(definitions.StringBuilderClass.tpe), List(List())))
-      while (in.token == STRINGPART) {
-        t = stringOp(t, nme.append)
-        var e = expr()
-        if (in.token == STRINGFMT) e = stringOp(e, nme.formatted)
-        t = atPos(t.pos.startOrPoint)(Apply(Select(t, nme.append), List(e)))
-      }
-      if (in.token == STRINGLIT) t = stringOp(t, nme.append)
-      atPos(t.pos)(Select(t, nme.toString_))
     }
 
 /* ------------- NEW LINES ------------------------------------------------- */
@@ -1479,7 +1456,8 @@ self =>
      *                  |  BlockExpr
      *                  |  SimpleExpr1 [`_']
      *  SimpleExpr1   ::= literal
-     *                  |  xLiteral
+     *                  |  XmlLiteral
+     *                  |  QuasiquoteLiteral
      *                  |  Path
      *                  |  `(' [Exprs] `)'
      *                  |  SimpleExpr `.' Id
@@ -1490,36 +1468,48 @@ self =>
     def simpleExpr(): Tree = {
       var canApply = true
       val t =
-        if (isLiteral) atPos(in.offset)(literal(false))
-        else in.token match {
-          case XMLSTART =>
-            xmlLiteral()
-          case IDENTIFIER | BACKQUOTED_IDENT | THIS | SUPER =>
-            path(true, false)
-          case USCORE =>
-            val start = in.offset
-            val pname = freshName("x$")
-            in.nextToken()
-            val id = atPos(start) (Ident(pname))
-            val param = atPos(id.pos.focus){ makeSyntheticParam(pname) }
-            placeholderParams = param :: placeholderParams
-            id
-          case LPAREN =>
-            atPos(in.offset)(makeParens(commaSeparated(expr)))
-          case LBRACE =>
-            canApply = false
-            blockExpr()
-          case NEW =>
-            canApply = false
-            val nstart = in.skipToken()
-            val npos = r2p(nstart, nstart, in.lastOffset)
-            val tstart = in.offset
-            val (parents, argss, self, stats) = template(false)
-            val cpos = r2p(tstart, tstart, in.lastOffset max tstart)
-            makeNew(parents, self, stats, argss, npos, cpos)
-          case _ =>
-            syntaxErrorOrIncomplete("illegal start of simple expression", true)
-            errorTermTree
+        try {
+          assert(in.nextTokenCanBeQuasiquote)
+          in.nextTokenCanBeQuasiquote = false
+
+          if (isLiteral) atPos(in.offset)(literal(false))
+          else in.token match {
+            case XMLSTART =>
+              xmlLiteral()
+            case QUASIQUOTESTART =>
+              quasiquoteLiteral()
+            case IDENTIFIER | BACKQUOTED_IDENT | THIS | SUPER =>
+              path(true, false)
+            case USCORE =>
+              val start = in.offset
+              val pname = freshName("x$")
+              in.nextToken()
+              val id = atPos(start) (Ident(pname))
+              val param = atPos(id.pos.focus){ makeSyntheticParam(pname) }
+              placeholderParams = param :: placeholderParams
+              id
+            case LPAREN =>
+              in.nextTokenCanBeQuasiquote = true
+              atPos(in.offset)(makeParens(commaSeparated(expr)))
+            case LBRACE =>
+              canApply = false
+              in.nextTokenCanBeQuasiquote = true
+              blockExpr()
+            case NEW =>
+              canApply = false
+              in.nextTokenCanBeQuasiquote = true
+              val nstart = in.skipToken()
+              val npos = r2p(nstart, nstart, in.lastOffset)
+              val tstart = in.offset
+              val (parents, argss, self, stats) = template(false)
+              val cpos = r2p(tstart, tstart, in.lastOffset max tstart)
+              makeNew(parents, self, stats, argss, npos, cpos)
+            case _ =>
+              syntaxErrorOrIncomplete("illegal start of simple expression", true)
+              errorTermTree
+          }
+        } finally {
+          in.nextTokenCanBeQuasiquote = true
         }
       simpleExprRest(t, canApply)
     }
@@ -1681,6 +1671,224 @@ self =>
 
     def makeFilter(start: Int, tree: Tree) = Filter(r2p(start, tree.pos.point, tree.pos.endOrPoint), tree)
 
+    def quasiquote(): Option[(Name, List[Tree], List[Tree], List[Tree])] = {
+      in.nextTokenCanBeQuasiquote = true
+      val provider = quasiquoteProvider() getOrElse null
+
+      var parts = List[Tree]()
+      var splices = List[Tree]()
+      var formats = List[Tree]()
+      while (in.token == SPLICEPREFIX) {
+        parts :+= splicePrefix() getOrElse null
+        splices :+= splice() getOrElse null
+        formats :+= spliceSuffix() getOrElse null
+      }
+
+      val ok = in.token == QUASIQUOTEEND
+      parts :+= quasiquoteEnd() getOrElse null
+      if (ok) Some((provider, parts, splices, formats)) else None
+    }
+
+    def quasiquoteProvider(): Option[Name] = {
+      if (in.token == QUASIQUOTESTART) {
+        val name = in.name
+        in.nextToken()
+        Some(name)
+      } else {
+        in.recoverFromQuasiquoteError()
+        None
+      }
+    }
+
+    def splicePrefix(): Option[Tree] = {
+      if (in.token == SPLICEPREFIX) {
+        val prefix = in.strVal
+        val offset = in.lastOffset
+        in.nextToken()
+        Some(atPos(o2p(offset))(Literal(Constant(prefix))))
+      } else {
+        in.recoverFromQuasiquoteError()
+        None
+      }
+    }
+
+    def splice(): Option[Tree] = {
+      if (in.inSimpleSplice)
+        simpleSplice()
+      else if (in.inFullSplice)
+        fullSplice()
+      else {
+        // this is a tricky part of recovering from errors in splices
+        // it might happen that we hit QUASIQUOTEERROR when exploring lookahead for a splice
+        // so we need to rewind no longer useful token from the splice and proceed with panicking
+        if (in.token != QUASIQUOTEERROR) {
+          in.nextToken()
+          assert(in.token == QUASIQUOTEERROR)
+        }
+
+        in.recoverFromQuasiquoteError()
+        None
+      }
+    }
+
+    /** Scanner guarantees that the token following simple splice perfix is an ident
+     *  Otherwise it would have spawned a QUASIQUOTEERROR
+     */
+    def simpleSplice(): Option[Tree] = {
+      if (in.token != QUASIQUOTEERROR) {
+        val start = in.offset
+        val name = ident()
+        val result = atPos(start) {
+          if (in.token == BACKQUOTED_IDENT) new BackQuotedIdent(name)
+          else Ident(name)
+        }
+        Some(result)
+      } else {
+        in.recoverFromQuasiquoteError()
+        None
+      }
+    }
+
+    /** However, full splice is something that lies outside of the scanner's domain
+     *  Certain types of errors can still be caught by scanner, but not all of them
+     *  That's why parser is the one who needs to be in charge of error handling here
+     */
+    def fullSplice(): Option[Tree] = {
+      if (in.token != QUASIQUOTEERROR) {
+        val result = expr()
+        if (in.token != ERROR) {
+          Some(result)
+        } else {
+          in.syntaxError(in.spliceStarts.head, "error in full splice") // QQ6
+          in.recoverFromQuasiquoteError()
+          None
+        }
+      } else {
+        in.recoverFromQuasiquoteError()
+        None
+      }
+    }
+
+    def spliceSuffix(): Option[Tree] = {
+      if (in.token == SPLICESUFFIX) {
+        val suffix = in.strVal
+        val offset = in.lastOffset
+        in.nextToken()
+        Some(atPos(o2p(offset))(Literal(Constant(suffix))))
+      } else {
+        in.recoverFromQuasiquoteError()
+        None
+      }
+    }
+
+    def quasiquoteEnd(): Option[Tree] = {
+      if (in.token == QUASIQUOTEEND) {
+        val part = in.strVal
+        val offset = in.lastOffset
+        in.nextTokenCanBeQuasiquote = false
+        in.nextToken()
+        Some(atPos(o2p(offset))(Literal(Constant(part))))
+      } else {
+        in.recoverFromQuasiquoteError()
+        in.nextTokenCanBeQuasiquote = false
+        in.nextToken()
+        None
+      }
+    }
+
+    /** {{{
+     *  QuasiquoteLiteral ::= <to be implemented>
+     *  }}}
+     *
+     *  Quasiquotes are declared as follows:
+     *    id "quasiquote"
+     *    id """quasiquote"""
+     *
+     *  One can view quasiquotes as string literals on steroids.
+     *  They allow seamless embedding of external domain-specific languages into Scala.
+     *  This doc covers usage of quasiquotes as literals in plain expressions.
+     *  See `quasiquoteLiteralPattern' for information about quasiquotes in pattern matches.
+     *
+     *  Quasiquotes support splices, which are, so to speak, active regions of quasiquotes.
+     *  They incorporate Scala code into a quasiquote, which makes all this machinery
+     *  look very much like string template engines.
+     *
+     *  Splices look as follows (the "c" prefix means a code quasiquotation):
+     *    val two = c"2" // will produce: Constant(Literal(2))
+     *    c"$two + $two" // will produce: Apply(Select(Constant(Literal(2)), newTermName("$plus")), List(Constant(Literal(2))))
+     *    c"${two}"      // full form of a splice: ${...}
+     *
+     *  Splices have two forms with different syntactic capabilities:
+     *    $foo           // simple form
+     *    ${foo * bar}   // full form without splice format
+     *    ${bar: fmt}    // full form with splice format
+     *
+     *  The simple form is only allowed to contain an identifier and nothing more.
+     *  The full form can host one or more expressions along with a splice format.
+     *  Splice format is only allowed in the full form and is optional.
+     */
+    def quasiquoteLiteral(): Tree = {
+      val start = in.offset
+      quasiquote() match {
+        case Some((provider, parts, splices, formats)) =>
+          val tparts = Apply(Ident(definitions.ListModule), parts)
+          val tsplices = Apply(Ident(definitions.ListModule), splices)
+          val tformats = Apply(Ident(definitions.ListModule), formats)
+          val ctor = New(TypeTree(definitions.QuasiquoteLiteralClass.tpe), List(List(tparts, tsplices, tformats)))
+          val result = atPos(o2p(start))(Apply(Select(ctor, provider), List()))
+          val trace = scala.tools.nsc.util.trace when settings.Yquasiquotedebug.value
+          trace("quasiquote literal: ")(result)
+          result
+        case None =>
+          errorTermTree
+      }
+    }
+
+    /** {{{
+     *  QuasiquotePattern ::= <to be implemented>
+     *  }}}
+     *
+     *  Along with their usage as literals (see `quasiquoteLiteral'),
+     *  quasiquotes can also be utilized to simplify domain-specific pattern matching.
+     *
+     *  In pattern matching mode variable bindings in splices
+     *  work almost in the same way as they do in vanilla patern matches in Scala:
+     *    (8.1.1)  case c"$x + $y"                 // will produce: case Apply(Select(x, plus), List(y)) if plus.toString == "+"
+     *    (8.1.2)  case c"${x: Int}"               // will produce: case x if x.tpe == IntClass.tpe
+     *    (8.1.3)  case c"sum @ ($x + $y)"         // will produce: case sum @ Apply(Select(x, plus), List(y)) if plus.toString == "+"
+     *    (8.1.4)  case c"2 + 2"                   // will produce: case Apply(Select(Constant(Literal(2)), plus), List(Constant(Literal(2))) if plus.toString == "+"
+     *    (8.1.5)  case c"$x + `two`"              // will produce: case $two if $two equalsStructure two
+     *    (8.1.6)  N/A                             // constructor patterns are unrelated to variable binding
+     *    (8.1.7)  N/A                             // tuple patterns are unrelated to variable binding
+     *    (8.1.8)  N/A                             // extractor patterns are unrelated to variable binding
+     *    (8.1.9)  case c"List(${xs: _*})          // will produce: case Apply(Ident(list), xs: _*) if list == ListModule
+     *    (8.1.10) N/A                             // infix operation patterns are unrelated to variable binding
+     *    (8.1.11) N/A                             // pattern alternatives are unrelated to variable binding
+     *    (8.1.12) N/A                             // XML patterns are unrelated to variable binding
+     *
+     *  This were the examples of how code quasiquotes work with pattern matching, however
+     *  different quasiquote providers might define completely different pattern matching behaviors.
+     *
+     *  More theoretic information and examples about this fancy language feature can be found here:
+     *  http://www.eecs.harvard.edu/~mainland/publications/mainland07quasiquoting.pdf
+     */
+    def quasiquotePattern(): Tree = {
+      val start = in.offset
+      quasiquote() match {
+        case Some((provider, parts, splices, formats)) =>
+          val tparts = Apply(Ident(definitions.ListModule), parts)
+          val tsplices = Apply(Ident(definitions.ListModule), splices)
+          val tformats = Apply(Ident(definitions.ListModule), formats)
+          val ctor = New(TypeTree(definitions.QuasiquotePatternClass.tpe), List(List(tparts, tsplices, tformats)))
+          val result = atPos(o2p(start))(Apply(Select(ctor, provider), List()))
+          val trace = scala.tools.nsc.util.trace when settings.Yquasiquotedebug.value
+          trace("quasiquote pattern: ")(result)
+          result
+        case None =>
+          errorTermTree
+      }
+    }
+
 /* -------- PATTERNS ------------------------------------------- */
 
     /** Methods which implicitly propagate whether the initial call took
@@ -1797,6 +2005,7 @@ self =>
        *                    |  `_'
        *                    |  literal
        *                    |  XmlPattern
+       *                    |  QuasiquotePattern
        *                    |  StableId  [TypeArgs] [`(' [SeqPatterns] `)']
        *                    |  `(' [Patterns] `)'
        *  SimpleSeqPattern ::= varid
@@ -1812,40 +2021,54 @@ self =>
        */
       def simplePattern(): Tree = {
         val start = in.offset
-        in.token match {
-          case IDENTIFIER | BACKQUOTED_IDENT | THIS =>
-            var t = stableId()
+        val t =
+          try {
+            assert(in.nextTokenCanBeQuasiquote)
+            in.nextTokenCanBeQuasiquote = false
+
             in.token match {
-              case INTLIT | LONGLIT | FLOATLIT | DOUBLELIT =>
-                t match {
-                  case Ident(nme.MINUS) =>
-                    return atPos(start) { literal(true) }
+              case IDENTIFIER | BACKQUOTED_IDENT | THIS =>
+                var t = stableId()
+                in.nextTokenCanBeQuasiquote = true
+                in.token match {
+                  case INTLIT | LONGLIT | FLOATLIT | DOUBLELIT =>
+                    t match {
+                      case Ident(nme.MINUS) =>
+                        return atPos(start) { literal(true) }
+                      case _ =>
+                    }
                   case _ =>
                 }
+                val typeAppliedTree = in.token match {
+                  case LBRACKET   => atPos(start, in.offset)(TypeApply(convertToTypeId(t), typeArgs()))
+                  case _          => t
+                }
+                in.token match {
+                  case LPAREN   => atPos(start, in.offset)(Apply(typeAppliedTree, argumentPatterns()))
+                  case _        => typeAppliedTree
+                }
+              case USCORE =>
+                in.nextToken()
+                atPos(start, start) { Ident(nme.WILDCARD) }
+              case CHARLIT | INTLIT | LONGLIT | FLOATLIT | DOUBLELIT |
+                   STRINGLIT | SYMBOLLIT | TRUE | FALSE | NULL =>
+                atPos(start) { literal(false) }
+              case LPAREN =>
+                in.nextTokenCanBeQuasiquote = true
+                atPos(start)(makeParens(noSeq.patterns()))
+              case XMLSTART =>
+                xmlLiteralPattern()
+              case QUASIQUOTESTART =>
+                quasiquotePattern()
               case _ =>
+                syntaxErrorOrIncomplete("illegal start of simple pattern", true)
+                errorPatternTree
             }
-            val typeAppliedTree = in.token match {
-              case LBRACKET   => atPos(start, in.offset)(TypeApply(convertToTypeId(t), typeArgs()))
-              case _          => t
-            }
-            in.token match {
-              case LPAREN   => atPos(start, in.offset)(Apply(typeAppliedTree, argumentPatterns()))
-              case _        => typeAppliedTree
-            }
-          case USCORE =>
-            in.nextToken()
-            atPos(start, start) { Ident(nme.WILDCARD) }
-          case CHARLIT | INTLIT | LONGLIT | FLOATLIT | DOUBLELIT |
-               STRINGLIT | STRINGPART | SYMBOLLIT | TRUE | FALSE | NULL =>
-            atPos(start) { literal(false) }
-          case LPAREN =>
-            atPos(start)(makeParens(noSeq.patterns()))
-          case XMLSTART =>
-            xmlLiteralPattern()
-          case _ =>
-            syntaxErrorOrIncomplete("illegal start of simple pattern", true)
-            errorPatternTree
-        }
+          } finally {
+            in.nextTokenCanBeQuasiquote = true
+          }
+
+        t
       }
     }
     /** The implementation of the context sensitive methods for parsing outside of patterns. */

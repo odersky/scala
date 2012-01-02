@@ -1,6 +1,6 @@
 package scala
 
-package object reflect extends CodeImplicits {
+package object reflect extends CodeImplicits with QuasiquoteImplicits {
 
   // !!! This was a val; we can't throw exceptions that aggressively without breaking
   // non-standard environments, e.g. google app engine.  I made it a lazy val, but

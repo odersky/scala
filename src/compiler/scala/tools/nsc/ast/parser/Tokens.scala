@@ -45,9 +45,7 @@ abstract class Tokens {
 }
 
 object Tokens extends Tokens {
-  final val STRINGPART = 7
   final val SYMBOLLIT = 8
-  final val STRINGFMT = 9
   def isLiteral(code: Int) =
     code >= CHARLIT && code <= SYMBOLLIT
 
@@ -157,4 +155,11 @@ object Tokens extends Tokens {
   final val WHITESPACE = 105
   final val IGNORE = 106
   final val ESCAPE = 109
+
+  /** quasiquotes */
+  final val QUASIQUOTESTART = 110
+  final val SPLICEPREFIX = 111
+  final val SPLICESUFFIX = 112
+  final val QUASIQUOTEEND = 113
+  final val QUASIQUOTEERROR = 114
 }

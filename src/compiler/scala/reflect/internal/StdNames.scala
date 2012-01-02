@@ -270,6 +270,7 @@ trait StdNames extends /*reflect.generic.StdNames with*/ NameManglers { self: Sy
     val scala_ : NameType          = "scala"
     val self: NameType             = "self"
     val setAccessible: NameType    = "setAccessible"
+    val show_ : NameType           = "show"
     val splice_ : NameType         = "splice"
     val synchronized_ : NameType   = "synchronized"
     val tail: NameType             = "tail"

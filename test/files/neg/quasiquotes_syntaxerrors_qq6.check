@@ -1,0 +1,34 @@
+quasiquotes_syntaxerrors_qq6.scala:2: error: Invalid literal number
+  println(s"${2bar")
+              ^
+quasiquotes_syntaxerrors_qq6.scala:2: error: error in full splice
+  println(s"${2bar")
+            ^
+quasiquotes_syntaxerrors_qq6.scala:3: error: unclosed full splice
+  println(s"${foo *")
+            ^
+quasiquotes_syntaxerrors_qq6.scala:4: error: Invalid literal number
+  println(s"${foo*2bar}")
+                  ^
+quasiquotes_syntaxerrors_qq6.scala:4: error: error in full splice
+  println(s"${foo*2bar}")
+            ^
+quasiquotes_syntaxerrors_qq6.scala:5: error: Invalid literal number
+  println(s"${foo*2bar")
+                  ^
+quasiquotes_syntaxerrors_qq6.scala:5: error: error in full splice
+  println(s"${foo*2bar")
+            ^
+quasiquotes_syntaxerrors_qq6.scala:6: error: Invalid literal number
+  println(s"${foo*2bar: fmt}")
+                  ^
+quasiquotes_syntaxerrors_qq6.scala:6: error: error in full splice
+  println(s"${foo*2bar: fmt}")
+            ^
+quasiquotes_syntaxerrors_qq6.scala:7: error: Invalid literal number
+  println(s"${foo*2bar:fmt")
+                  ^
+quasiquotes_syntaxerrors_qq6.scala:7: error: error in full splice
+  println(s"${foo*2bar:fmt")
+            ^
+11 errors found

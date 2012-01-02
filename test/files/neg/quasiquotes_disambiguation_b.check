@@ -1,0 +1,4 @@
+quasiquotes_disambiguation_b.scala:5: error: value s is not a member of String
+  println("a" s"foo")
+              ^
+one error found

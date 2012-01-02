@@ -54,3 +54,13 @@ trait CodeImplicits {
   
   implicit def tree2ucode(tree: Tree) = new Ucode(tree)
 }
+
+trait QuasiquoteImplicits {
+  implicit def quasiquote2reify(quasiquote: Quasiquote) = 
+    new ReifyQuasiquote(quasiquote)
+  
+  class ReifyQuasiquote(quasiquote: Quasiquote) {
+    // todo. to be transformed into a macro
+    def c() = ???
+  }
+}

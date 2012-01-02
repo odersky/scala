@@ -1,0 +1,49 @@
+quasiquotes_syntaxerrors_qq4.scala:2: error: unclosed full splice
+  println(s"${foo")
+            ^
+quasiquotes_syntaxerrors_qq4.scala:3: error: unclosed full splice
+  println(s"${foo  ")
+            ^
+quasiquotes_syntaxerrors_qq4.scala:4: error: unclosed full splice
+  println(s"qwe${foo")
+               ^
+quasiquotes_syntaxerrors_qq4.scala:5: error: unclosed full splice
+  println(s"qwe${foo ")
+               ^
+quasiquotes_syntaxerrors_qq4.scala:6: error: unclosed full splice
+  println(s"${foo:")
+            ^
+quasiquotes_syntaxerrors_qq4.scala:7: error: unclosed full splice
+  println(s"${foo:  ")
+            ^
+quasiquotes_syntaxerrors_qq4.scala:8: error: unclosed full splice
+  println(s"${foo:bar")
+            ^
+quasiquotes_syntaxerrors_qq4.scala:9: error: unclosed full splice
+  println(s"${foo: bar")
+            ^
+quasiquotes_syntaxerrors_qq4.scala:10: error: unclosed full splice
+  println(s"${foo:bar ")
+            ^
+quasiquotes_syntaxerrors_qq4.scala:11: error: unclosed full splice
+  println(s"${foo: bar ")
+            ^
+quasiquotes_syntaxerrors_qq4.scala:12: error: unclosed full splice
+  println(s"qwe${foo:")
+               ^
+quasiquotes_syntaxerrors_qq4.scala:13: error: unclosed full splice
+  println(s"qwe${foo:   ")
+               ^
+quasiquotes_syntaxerrors_qq4.scala:14: error: unclosed full splice
+  println(s"qwe${foo:bar")
+               ^
+quasiquotes_syntaxerrors_qq4.scala:15: error: unclosed full splice
+  println(s"qwe${foo:   bar")
+               ^
+quasiquotes_syntaxerrors_qq4.scala:16: error: unclosed full splice
+  println(s"qwe${foo:bar ")
+               ^
+quasiquotes_syntaxerrors_qq4.scala:17: error: unclosed full splice
+  println(s"qwe${foo:  bar  ")
+               ^
+16 errors found

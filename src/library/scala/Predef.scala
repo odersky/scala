@@ -385,6 +385,7 @@ object Predef extends LowPriorityImplicits {
   // Strings and CharSequences --------------------------------------------------------------
 
   implicit def any2stringadd(x: Any) = new runtime.StringAdd(x)
+  implicit def quasiquote2stringcontext(quasiquote: reflect.Quasiquote) = new runtime.StringContextQuasiquote(quasiquote)
   implicit def augmentString(x: String): StringOps = new StringOps(x)
   implicit def unaugmentString(x: StringOps): String = x.repr
 

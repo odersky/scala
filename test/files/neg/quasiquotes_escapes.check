@@ -1,0 +1,7 @@
+quasiquotes_escapes.scala:3: error: invalid escape character
+  println(s"foo/qbar")
+                ^
+quasiquotes_escapes.scala:3: error: error during string interpolation
+  println(s"foo/qbar")
+          ^
+two errors found

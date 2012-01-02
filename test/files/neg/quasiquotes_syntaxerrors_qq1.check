@@ -1,0 +1,31 @@
+quasiquotes_syntaxerrors_qq1.scala:2: error: unclosed quasiquote
+  println(s"
+           ^
+quasiquotes_syntaxerrors_qq1.scala:3: error: unclosed quasiquote
+  println(s")
+           ^
+quasiquotes_syntaxerrors_qq1.scala:4: error: unclosed quasiquote
+  println(s"foo
+           ^
+quasiquotes_syntaxerrors_qq1.scala:5: error: unclosed quasiquote
+  println(s"foo)
+           ^
+quasiquotes_syntaxerrors_qq1.scala:6: error: unclosed quasiquote
+  println(s"${
+           ^
+quasiquotes_syntaxerrors_qq1.scala:7: error: unclosed quasiquote
+  println(s"${foo)
+           ^
+quasiquotes_syntaxerrors_qq1.scala:8: error: unclosed quasiquote
+  println(s"${foo:
+           ^
+quasiquotes_syntaxerrors_qq1.scala:9: error: unclosed quasiquote
+  println(s"${foo:)
+           ^
+quasiquotes_syntaxerrors_qq1.scala:10: error: unclosed quasiquote
+  println(s"${foo: bar
+           ^
+quasiquotes_syntaxerrors_qq1.scala:11: error: unclosed quasiquote
+  println(s"${foo:bar)
+           ^
+10 errors found

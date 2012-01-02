@@ -1,0 +1,49 @@
+quasiquotes_syntaxerrors_qq3.scala:2: error: Invalid literal number
+  println(s"$2err")
+             ^
+quasiquotes_syntaxerrors_qq3.scala:2: error: error in simple splice
+  println(s"$2err")
+            ^
+quasiquotes_syntaxerrors_qq3.scala:3: error: Invalid literal number
+  println(s"qwe$2err")
+                ^
+quasiquotes_syntaxerrors_qq3.scala:3: error: error in simple splice
+  println(s"qwe$2err")
+               ^
+quasiquotes_syntaxerrors_qq3.scala:4: error: Invalid literal number
+  println(s"$2err  bar")
+             ^
+quasiquotes_syntaxerrors_qq3.scala:4: error: error in simple splice
+  println(s"$2err  bar")
+            ^
+quasiquotes_syntaxerrors_qq3.scala:5: error: Invalid literal number
+  println(s"qwe$2err bar")
+                ^
+quasiquotes_syntaxerrors_qq3.scala:5: error: error in simple splice
+  println(s"qwe$2err bar")
+               ^
+quasiquotes_syntaxerrors_qq3.scala:6: error: Invalid literal number
+  println(s"$22err")
+             ^
+quasiquotes_syntaxerrors_qq3.scala:6: error: error in simple splice
+  println(s"$22err")
+            ^
+quasiquotes_syntaxerrors_qq3.scala:7: error: Invalid literal number
+  println(s"qwe$22err")
+                ^
+quasiquotes_syntaxerrors_qq3.scala:7: error: error in simple splice
+  println(s"qwe$22err")
+               ^
+quasiquotes_syntaxerrors_qq3.scala:8: error: Invalid literal number
+  println(s"$22err bar")
+             ^
+quasiquotes_syntaxerrors_qq3.scala:8: error: error in simple splice
+  println(s"$22err bar")
+            ^
+quasiquotes_syntaxerrors_qq3.scala:9: error: Invalid literal number
+  println(s"qwe$22err bar")
+                ^
+quasiquotes_syntaxerrors_qq3.scala:9: error: error in simple splice
+  println(s"qwe$22err bar")
+               ^
+16 errors found

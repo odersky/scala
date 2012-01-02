@@ -157,11 +157,12 @@ trait Scanners extends ScannersCommon {
     /** a stack of tokens which indicates whether line-ends can be statement separators
      *  also used for keeping track of nesting levels.
      *  We keep track of the closing symbol of a region. This can be
-     *  RPAREN    if region starts with '('
-     *  RBRACKET  if region starts with '['
-     *  RBRACE    if region starts with '{'
-     *  ARROW     if region starts with `case'
-     *  STRINGFMT if region is a string interpolation expression starting with '\{'
+     *  RPAREN        if region starts with '('
+     *  RBRACKET      if region starts with '['
+     *  RBRACE        if region starts with '{'
+     *  ARROW         if region starts with `case'
+     *  QUASIQUOTEEND if region is a quasiquote
+     *  SPLICESUFFIX  if region is a quasiquote splice
      */
     var sepRegions: List[Int] = List()
 
@@ -189,12 +190,14 @@ trait Scanners extends ScannersCommon {
           sepRegions = RBRACE :: sepRegions
         case CASE =>
           sepRegions = ARROW :: sepRegions
-        case STRINGPART =>
-          sepRegions = STRINGFMT :: sepRegions
+        case QUASIQUOTESTART =>
+          sepRegions = QUASIQUOTEEND :: sepRegions
+        case SPLICEPREFIX =>
+          sepRegions = SPLICESUFFIX :: sepRegions
         case RBRACE =>
           sepRegions = sepRegions dropWhile (_ != RBRACE)
           if (!sepRegions.isEmpty) sepRegions = sepRegions.tail
-        case RBRACKET | RPAREN | ARROW | STRINGFMT =>
+        case RBRACKET | RPAREN | ARROW | QUASIQUOTEEND | SPLICESUFFIX =>
           if (!sepRegions.isEmpty && sepRegions.head == lastToken)
             sepRegions = sepRegions.tail
         case _ =>
@@ -253,6 +256,41 @@ trait Scanners extends ScannersCommon {
         }
       }
 
+      // Enter quasiquoting mode upon ident + stringlit
+      // Coalescing of these tokens might be disabled by the parser
+      // Read more about that below in comments to `enterQuasiquote'
+      if (token == IDENTIFIER || token == BACKQUOTED_IDENT) {
+        val savedOffset = charOffset
+        prev copyFrom this
+
+        try {
+          inQuasiquoteLookahead = true
+          fetchToken()
+        } finally {
+          inQuasiquoteLookahead = false
+        }
+
+        var enteringQuasiquote = false
+        if (token == STRINGLIT && nextTokenCanBeQuasiquote) {
+          if (settings.Xquasiquotes.value) {
+            enteringQuasiquote = true
+          } else {
+            warning(offset, "looks like you want to write a quasiquote. have you forgotten to enable -Xquasiquotes?")
+          }
+        }
+
+        if (enteringQuasiquote) {
+          this copyFrom prev
+          charOffset = savedOffset
+          ch = buf(charOffset - 1)
+          enterQuasiquote()
+        } else {
+          lastOffset = savedOffset - 1
+          next copyFrom this
+          this copyFrom prev
+        }
+      }
+
 //      print("["+this+"]")
     }
 
@@ -288,6 +326,13 @@ trait Scanners extends ScannersCommon {
     /** read next token, filling TokenData fields of Scanner.
      */
     protected final def fetchToken() {
+      if (inSplice)
+        getSplicePart()
+      else
+        vanillaFetchToken()
+    }
+
+    private def vanillaFetchToken() {
       offset = charOffset - 1
       (ch: @switch) match {
 
@@ -360,18 +405,32 @@ trait Scanners extends ScannersCommon {
         case '`' =>
           getBackquotedIdent()
         case '\"' =>
+          assert(!inQuasiquote) // double quotes are processed in `getQuasiquotePart'
+          if (inSplice) { doubleQuoteWhenInSplice(); return }
+
+          val enteringQuasiquote = token == QUASIQUOTESTART
           nextChar()
           if (ch == '\"') {
             nextChar()
             if (ch == '\"') {
               nextRawChar()
-              getMultiLineStringLit()
+              if (enteringQuasiquote) {
+                qqRegions = MLQQ :: qqRegions
+                getMultiLineQuasiquotePart()
+              } else {
+                getMultiLineStringLit()
+              }
             } else {
-              token = STRINGLIT
+              token = if (enteringQuasiquote) QUASIQUOTEEND else STRINGLIT
               strVal = ""
             }
           } else {
-            getStringPart()
+            if (enteringQuasiquote) {
+              qqRegions = SLQQ :: qqRegions
+              getQuasiquotePart()
+            } else {
+              getStringLit()
+            }
           }
         case '\'' =>
           nextChar()
@@ -397,9 +456,7 @@ trait Scanners extends ScannersCommon {
             token = DOT
           }
         case ';' =>
-          nextChar()
-          if (inStringInterpolation) getFormatString()
-          else token = SEMI
+          nextChar(); token = SEMI
         case ',' =>
           nextChar(); token = COMMA
         case '(' =>
@@ -409,16 +466,7 @@ trait Scanners extends ScannersCommon {
         case ')' =>
           nextChar(); token = RPAREN
         case '}' =>
-          if (token == STRINGFMT) {
-            nextChar()
-            getStringPart()
-          } else if (inStringInterpolation) {
-            strVal = "";
-            token = STRINGFMT
-          } else {
-            nextChar();
-            token = RBRACE
-          }
+          nextChar(); token = RBRACE
         case '[' =>
           nextChar(); token = LBRACKET
         case ']' =>
@@ -506,11 +554,6 @@ trait Scanners extends ScannersCommon {
       }
     }
 
-    /** Are we directly in a string interpolation expression?
-     */
-    private def inStringInterpolation =
-      sepRegions.nonEmpty && sepRegions.head == STRINGFMT
-
     /** Can token start a statement? */
     def inFirstOfStat(token: Int) = token match {
       case EOF | CATCH | ELSE | EXTENDS | FINALLY | FORSOME | MATCH | WITH | YIELD |
@@ -525,7 +568,7 @@ trait Scanners extends ScannersCommon {
     def inLastOfStat(token: Int) = token match {
       case CHARLIT | INTLIT | LONGLIT | FLOATLIT | DOUBLELIT | STRINGLIT | SYMBOLLIT |
            IDENTIFIER | BACKQUOTED_IDENT | THIS | NULL | TRUE | FALSE | RETURN | USCORE |
-           TYPE | XMLSTART | RPAREN | RBRACKET | RBRACE =>
+           TYPE | XMLSTART | QUASIQUOTEEND | RPAREN | RBRACKET | RBRACE =>
         true
       case _ =>
         false
@@ -609,33 +652,26 @@ trait Scanners extends ScannersCommon {
       }
     }
 
-    def getFormatString() = {
-      getLitChars('}', '"', ' ', '\t')
-      if (ch == '}') {
-        setStrVal()
-        if (strVal.length > 0) strVal = "%" + strVal
-        token = STRINGFMT
-      } else {
-        syntaxError("unclosed format string")
-      }
-    }
+    def getStringLit() = {
+      while (ch != '"' && (ch != CR && ch != LF && ch != SU || isUnicodeEscape))
+        getLitChar()
 
-    def getStringPart() = {
-      while (ch != '"' && (ch != CR && ch != LF && ch != SU || isUnicodeEscape) && maybeGetLitChar()) {}
       if (ch == '"') {
         setStrVal()
         nextChar()
         token = STRINGLIT
-      } else if (ch == '{' && settings.Xexperimental.value) {
-        setStrVal()
-        nextChar()
-        token = STRINGPART
       } else {
-        syntaxError("unclosed string literal")
+        val enteringQuasiquote = (token == IDENTIFIER || token == BACKQUOTED_IDENT) && nextTokenCanBeQuasiquote
+        if (settings.Xquasiquotes.value) {
+          syntaxError("unclosed quasiquote")
+        } else {
+          warning(offset, "looks like you want to write a quasiquote. have you forgotten to enable -Xquasiquotes?")
+          syntaxError("unclosed string literal")
+        }
       }
     }
 
-    private def getMultiLineStringLit() {
+    def getMultiLineStringLit() {
       if (ch == '\"') {
         nextRawChar()
         if (ch == '\"') {
@@ -666,19 +702,329 @@ trait Scanners extends ScannersCommon {
       }
     }
 
+// Quasiquotes -----------------------------------------------------------------
+
+    /** See Parsers.scala for information about quasiquotes and their syntax,
+     *  below you can find the details about tokens emitted by the scanner when parsing a quasiquote.
+     *
+     *  Quasiquotes get lexed in the following way that is consistent across different variations
+     *  (i.e. regardless of the type of a quasiquote, the number or the types of its splices,
+     *  the sequence of tokens will always be the same):
+     *    QUASIQUOTESTART     // marker token that carries the name of the quasiquote provider
+     *    SPLICEPREFIX        // strVal contains the characters that come before the first splice (if applicable)
+     *    <splice #1>         // sequence of tokens that represent the first splice (IDENTIFIER for a simple splice, one or more expressions for a full splice)
+     *    SPLICESUFFIX        // strVal holds the format of the splice or an empty string if no format has been provided
+     *    SPLICEPREFIX        // strVal contains the characters that come in-between first and second splice (if applicable)
+     *    <splice #2>         // sequence of tokens that represent the second splice (IDENTIFIER for a simple splice, one or more expressions for a full splice)
+     *    SPLICESUFFIX        // strVal holds the format of the splice or an empty string if no format has been provided
+     *    ...
+     *    QUASIQUOTEEND       // marker token that carries the characters that come after the last splice (or the entire string if there are no splices)
+     *
+     *  For example:
+     *    s"foo$bar
+     *  will be lexed as:
+     *    quasiquotestart(newTermName("s"))
+     *    spliceprefix("foo")
+     *    identifier(newTermName("bar"))
+     *    splicesuffix("")
+     *    quasiquoteend("")
+     *
+     *  Another example:
+     *    c"${x: Int} + ${y*z} > 5"
+     *  will be lexed as:
+     *    quasiquotestart(newTermName("c"))
+     *    spliceprefix("")
+     *    identifier(newTermName("x"))
+     *    splicesuffix("Int") // whitespaces are omitted
+     *    sliceprefix(" + ")
+     *    identifier(newTermName("y"))
+     *    identifier(newTermName("*"))
+     *    identifier(newTermName("z"))
+     *    splicesuffix("")
+     *    quasiquoteend(" > 5")
+     *
+     *  When lexing quasiquotes scanner can stumble upon one of the following syntactic errors:
+     *    (QQ1) Unclosed quasiquote: s"..., s"${..., s"${foo:...
+     *    (QQ2) Invalid simple splice: s"$", s"$2"
+     *    (QQ3) Error in simple splice: // happens when parser returns an error when invoked upon a simple splice (e.g. s"$2bar")
+     *    (QQ4) Unclosed full splice: s"${..." or s"${foo:"
+     *    (QQ5) Invalid full splice: s"${}"
+     *    (QQ6) Error in full splice: // happens when parser returns an error when invoked upon a full splice (e.g. s"${foo*}")
+     *    (QQ7) Invalid splice format: s"${foo:}"
+     *
+     *  In these cases we apply a best effort strategy to resync the token stream in a joint effort of scanner and parser.
+     *  When called, `recoverFromQuasiquoteError' pops all quasiquote-related tokens off sepRegions and qqRegions,
+     *  and rewinds the token stream to the closing double-quote character that corresponds to the outermost quasiquote.
+     *  Usually, scanner does the job of detecting and recovering, but when we lex the contents of a full splice
+     *  we're out of quasiquoting context, so the parser itself should check for inSplice and behave accordingly.
+     *
+     *  Thanks to this strategy, quasiquotes are transparent to the parts of the parser that aren't involved in parsing quasiquotes.
+     *  For example, if we write: 2 + b"011$" (which correspond to a binary literal with an error in a simple splice), then the scanner will emit
+     *    intlit(2)
+     *    identifier(newTermName("+"))
+     *    quasiquotestart(newTermName("b"))
+     *    spliceprefix("011")
+     *    quasiquoteerror
+     *
+     *  However, all quasiquote-related tokens will be processed up the stack from the quasiquote() call in Parser.
+     *  Before returning, quasiquote() will happily rewind the token stream to the next token after quasiquoteerror
+     *  and noone below the stack will ever notice that something bad has happened.
+     *
+     *  Of course, if the input is seriously screwed (the only possibility for that is omitting the closing double-quote), then the hell breaks loose.
+     *  While trying to resync, `recoverFromQuasiquoteError' will read up to the end of line (or to the end of file) and everything will blow up.
+     *  Not that this is something bad, though, since this will lead neither to the crash nor to an infinite loop (yes, skip(UNDEF), I'm talking about you!)
+     */
+    def enterQuasiquote() {
+      assert(!inQuasiquote)
+      token = QUASIQUOTESTART
+    }
+
+    /** Tracks the state of quasiquote parsing
+     *
+     *  First of all, why do we need to track this on the Scanner level?
+     *  1) Quasiquotes are meant to embed external languages, some of which might be
+     *  quite different from Scala and have different lexical rules. Thus, when parsing a quasiquote
+     *  we need to ignore all character escapes and return escape sequences verbatim.
+     *  2) Also, quasiquotes/splices can be arbitrarily nested, so we need to keep track of that and
+     *  correctly return to the previous level once current level has been parsed to the end.
+     *
+     *  The tracking is done absolutely transparent to the parser: once scanner sees an identifier and an string literal juxtaposed,
+     *  it converts the identifier into the token that indicates the beginning of the quasiquote, and the fun begins.
+     *
+     *  However, there's a small fly in the ointment. Unfortunately, sometimes we need guidance from the parser.
+     *  For example, it would be illegal to coalesce + and "b" in a + "b". Validation logic relies on opstack, and
+     *  this is something that only parser has access to. That's why scanner has the `nextTokenCanBeQuasiquote' flag.
+     */
+    private[this] final val SLQQ = 0    // single-line quasiquote
+    private[this] final val MLQQ = 1    // multi-line quasiquote
+    private[this] final val SS = 2      // simple splice
+    private[this] final val FS = 3      // full splice
+    var qqRegions: List[Int] = List()
+    var spliceStarts: List[Int] = List()
+    def inSingleLineQuasiquote = qqRegions.headOption map { state => state == SLQQ } getOrElse false
+    def inMultiLineQuasiquote = qqRegions.headOption map { state => state == MLQQ } getOrElse false
+    def inQuasiquote = qqRegions.headOption map { state => state == SLQQ || state == MLQQ } getOrElse false
+    def inSimpleSplice = qqRegions.headOption map { state => state == SS } getOrElse false
+    def inFullSplice = qqRegions.headOption map { state => state == FS } getOrElse false
+    def inSplice = qqRegions.headOption map { state => state == SS || state == FS } getOrElse false
+    var inQuasiquoteLookahead = false
+    var nextTokenCanBeQuasiquote = true
+
+    def getQuasiquotePart() {
+      if (inSingleLineQuasiquote)
+        getSingleLineQuasiquotePart()
+      else if (inMultiLineQuasiquote)
+        getMultiLineQuasiquotePart()
+      else
+        assert(false)
+    }
+
+    def getSingleLineQuasiquotePart() {
+      assert(inSingleLineQuasiquote)
+
+      var beginningOfSplice = false
+      def readDollars(): Boolean = {
+        var dollars = 0
+        while (ch == '$') {
+          dollars += 1
+          nextChar(false)
+        }
+
+        for (i <- Range(0, dollars / 2)) putChar('$')
+        beginningOfSplice = (dollars % 2) != 0
+        !beginningOfSplice
+      }
+
+      while (ch != '"' && readDollars() && (ch != CR && ch != LF && ch != SU))
+        getLitChar()
+
+      if (beginningOfSplice) {
+        setStrVal()
+        if (ch == '{') {
+          qqRegions = FS :: qqRegions
+          spliceStarts = charOffset - 2 :: spliceStarts
+          nextChar(true)
+        } else {
+          qqRegions = SS :: qqRegions
+          spliceStarts = charOffset - 2 :: spliceStarts
+        }
+        token = SPLICEPREFIX
+        return
+      }
+
+      if (ch == '"') {
+        qqRegions = qqRegions.tail
+        setStrVal()
+        nextChar(true)
+        token = QUASIQUOTEEND
+      } else { // CR, LF, SU
+        syntaxError("unclosed quasiquote") // QQ1
+      }
+    }
+
+    def getMultiLineQuasiquotePart() {
+      assert(inMultiLineQuasiquote)
+      ???
+    }
+
+    def getSplicePart() {
+      if (inSimpleSplice)
+        getSimpleSplicePart()
+      else if (inFullSplice)
+        getFullSplicePart()
+      else
+        assert(false)
+    }
+
+    def getSimpleSplicePart() {
+      assert(inSimpleSplice)
+      token match {
+        case SPLICEPREFIX =>
+          vanillaFetchToken()
+          token match {
+            case IDENTIFIER | BACKQUOTED_IDENT =>
+              ;
+            case ERROR =>
+              syntaxError(spliceStarts.head, "error in simple splice") // QQ3
+              recoverFromQuasiquoteError()
+            case QUASIQUOTEERROR =>
+              ;
+            case _ =>
+              syntaxError(spliceStarts.head, "invalid simple splice") // QQ2
+              recoverFromQuasiquoteError()
+          }
+        case IDENTIFIER | BACKQUOTED_IDENT =>
+          strVal = ""
+          token = SPLICESUFFIX
+        case SPLICESUFFIX =>
+          qqRegions = qqRegions.tail
+          spliceStarts = spliceStarts.tail
+          getQuasiquotePart()
+        case _ =>
+          assert(false)
+      }
+    }
+
+    def getFullSplicePart() {
+      assert(inFullSplice)
+      if (!sepRegions.isEmpty && sepRegions.head == SPLICESUFFIX) {
+        (ch: @switch) match {
+          case ':' =>
+            putChar(ch)
+            nextChar()
+            getOperatorRest()
+            if (token == COLON) {
+              val colonOffset = charOffset - 2
+              getLitChars('}', '"')
+              if (ch == '}') {
+                setStrVal()
+                strVal = strVal.trim()
+                if (strVal == "") {
+                  syntaxError(colonOffset, "invalid splice format") // QQ7
+                  recoverFromQuasiquoteError()
+                } else {
+                  token = SPLICESUFFIX
+                  sepRegions = SPLICESUFFIX :: sepRegions // hack!
+                }
+              } else if (ch == '"') {
+                syntaxError(spliceStarts.head, "unclosed full splice") // QQ4
+                recoverFromQuasiquoteError()
+              } else { // CR, LF, SU
+                syntaxError(charOffset - 1, "unclosed quasiquote") // QQ1
+                recoverFromQuasiquoteError()
+              }
+            }
+          case '}' =>
+            if (token == SPLICEPREFIX) {
+              syntaxError(spliceStarts.head, "invalid full splice") // QQ5
+              recoverFromQuasiquoteError()
+            } else if (token == SPLICESUFFIX) {
+              qqRegions = qqRegions.tail
+              spliceStarts = spliceStarts.tail
+              sepRegions = sepRegions.tail // hack!
+              nextChar(false)
+              getQuasiquotePart()
+            } else {
+              strVal = ""
+              token = SPLICESUFFIX
+              sepRegions = SPLICESUFFIX :: sepRegions // hack!
+            }
+          case _ =>
+            vanillaFetchToken()
+            if (token == ERROR) {
+              syntaxError(spliceStarts.head, "error in full splice") // QQ6
+              recoverFromQuasiquoteError()
+            }
+        }
+      } else {
+        vanillaFetchToken()
+        if (token == ERROR) {
+          syntaxError(spliceStarts.head, "error in full splice") // QQ6
+          recoverFromQuasiquoteError()
+        }
+      }
+    }
+
+    def doubleQuoteWhenInSplice() {
+      if (inSimpleSplice)
+        doubleQuoteWhenInSimpleSplice()
+      else if (inFullSplice)
+        doubleQuoteWhenInFullSplice()
+      else
+        assert(false)
+    }
+
+    def doubleQuoteWhenInSimpleSplice() {
+      syntaxError(spliceStarts.head, "invalid simple splice") // QQ2
+      recoverFromQuasiquoteError()
+    }
+
+    def doubleQuoteWhenInFullSplice() {
+      syntaxError(spliceStarts.head, "unclosed full splice") // QQ4
+      recoverFromQuasiquoteError()
+    }
+
+    /** Read up about possible errors during lexing/parsing quasiquotes and
+     *  about error handling/recovery strategy in comments to `enterQuasiquote'.
+     *
+     *  Important note: the effect of this function being called several times in rapid succession
+     *  should be equal to the effect of a single call to it. Parser heavily relies on this fact.
+     */
+    def recoverFromQuasiquoteError() {
+      if (token == QUASIQUOTEERROR)
+        return
+
+      def dropSepRegionsUpto(sepRegion: Int) {
+        while (!sepRegions.isEmpty && sepRegions.head != sepRegion)
+          sepRegions = sepRegions.tail
+        if (sepRegions.head == sepRegion)
+          sepRegions = sepRegions.tail
+      }
+
+      qqRegions foreach {
+        case SS => dropSepRegionsUpto(SPLICESUFFIX); spliceStarts = spliceStarts.tail;
+        case FS => getLitChars('}', '"'); dropSepRegionsUpto(SPLICESUFFIX); spliceStarts = spliceStarts.tail;
+        case SLQQ => getLitChars('"'); nextChar(true); dropSepRegionsUpto(QUASIQUOTEEND);
+        case MLQQ => ; // implement this
+      }
+
+      qqRegions = List()
+      errOffset = charOffset - 1
+      token = QUASIQUOTEERROR
+    }
+
 // Literals -----------------------------------------------------------------
 
     /** read next character in character or string literal:
-     *  if character sequence is a \{ escape, do not copy it into the string and return false.
-     *  otherwise return true.
      */
-    protected def maybeGetLitChar(): Boolean = {
-      if (ch == '\\') {
-        nextChar()
+    protected def getLitChar(): Unit = {
+      val interpretEscapes = !inQuasiquote && !inQuasiquoteLookahead
+      if (ch == '\\' && interpretEscapes) {
+        nextChar(interpretEscapes)
         if ('0' <= ch && ch <= '7') {
           val leadch: Char = ch
           var oct: Int = digit2int(ch, 8)
-          nextChar()
+          nextChar(interpretEscapes)
           if ('0' <= ch && ch <= '7') {
             oct = oct * 8 + digit2int(ch, 8)
             nextChar()
@@ -698,16 +1044,14 @@ trait Scanners extends ScannersCommon {
             case '\"' => putChar('\"')
             case '\'' => putChar('\'')
             case '\\' => putChar('\\')
-            case '{'  => return false
             case _    => invalidEscape()
           }
-          nextChar()
+          nextChar(interpretEscapes)
         }
       } else  {
         putChar(ch)
-        nextChar()
+        nextChar(interpretEscapes)
       }
-      true
     }
 
     protected def invalidEscape(): Unit = {
@@ -715,11 +1059,9 @@ trait Scanners extends ScannersCommon {
       putChar(ch)
     }
 
-    protected def getLitChar(): Unit =
-      if (!maybeGetLitChar()) invalidEscape()
-
     private def getLitChars(delimiters: Char*) {
-      while (!(delimiters contains ch) && (ch != CR && ch != LF && ch != SU || isUnicodeEscape)) {
+      val interpretEscapes = !inQuasiquote && !inQuasiquoteLookahead
+      while (!(delimiters contains ch) && (ch != CR && ch != LF && ch != SU || (interpretEscapes && isUnicodeEscape))) {
         getLitChar()
       }
     }
@@ -969,10 +1311,16 @@ trait Scanners extends ScannersCommon {
         "double(" + floatVal + ")"
       case STRINGLIT =>
         "string(" + strVal + ")"
-      case STRINGPART =>
-        "stringpart(" + strVal + ")"
-      case STRINGFMT =>
-        "stringfmt(" + strVal + ")"
+      case QUASIQUOTESTART =>
+        "quasiquotestart(" + name + ")"
+      case SPLICEPREFIX =>
+        "spliceprefix(" + strVal + ")"
+      case SPLICESUFFIX =>
+        "splicesuffix(" + strVal + ")"
+      case QUASIQUOTEEND =>
+        "quasiquoteend(" + strVal + ")"
+      case QUASIQUOTEERROR =>
+        "quasiquoteerror"
       case SEMI =>
         ";"
       case NEWLINE =>
@@ -1088,8 +1436,12 @@ trait Scanners extends ScannersCommon {
     case LONGLIT => "long literal"
     case FLOATLIT => "float literal"
     case DOUBLELIT => "double literal"
-    case STRINGLIT | STRINGPART => "string literal"
-    case STRINGFMT => "format string"
+    case STRINGLIT => "string literal"
+    case QUASIQUOTESTART => "quasiquote"
+    case SPLICEPREFIX => "quasiquote"
+    case SPLICESUFFIX => "quasiquote"
+    case QUASIQUOTEEND => "quasiquote"
+    case QUASIQUOTEERROR => "quasiquote"
     case SYMBOLLIT => "symbol literal"
     case LPAREN => "'('"
     case RPAREN => "')'"

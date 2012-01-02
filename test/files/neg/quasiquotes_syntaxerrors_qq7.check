@@ -1,0 +1,25 @@
+quasiquotes_syntaxerrors_qq7.scala:2: error: invalid splice format
+  println(s"${foo:}")
+                 ^
+quasiquotes_syntaxerrors_qq7.scala:3: error: invalid splice format
+  println(s"${foo: }")
+                 ^
+quasiquotes_syntaxerrors_qq7.scala:4: error: invalid splice format
+  println(s"qwe${foo:}")
+                    ^
+quasiquotes_syntaxerrors_qq7.scala:5: error: invalid splice format
+  println(s"qwe${foo:  }")
+                    ^
+quasiquotes_syntaxerrors_qq7.scala:6: error: invalid splice format
+  println(s"${foo:}bar")
+                 ^
+quasiquotes_syntaxerrors_qq7.scala:7: error: invalid splice format
+  println(s"${foo:  }bar")
+                 ^
+quasiquotes_syntaxerrors_qq7.scala:8: error: invalid splice format
+  println(s"qwe${foo:}bar")
+                    ^
+quasiquotes_syntaxerrors_qq7.scala:9: error: invalid splice format
+  println(s"qwe${foo:  }bar")
+                    ^
+8 errors found

@@ -28,7 +28,7 @@ import scala.tools.util.EditDistance.similarString
  *  @author  Martin Odersky
  *  @version 1.0
  */
-trait Typers extends Modes with Adaptations with PatMatVirtualiser {
+trait Typers extends Modes with Adaptations with PatMatVirtualiser with Quasiquoter {
   self: Analyzer =>
 
   import global._
@@ -973,7 +973,7 @@ trait Typers extends Modes with Adaptations with PatMatVirtualiser {
                   }
                 }
               }
-              
+
               if (settings.debug.value) {
                 log("error tree = " + tree)
                 if (settings.explaintypes.value) explainTypes(tree.tpe, pt)
@@ -1890,6 +1890,22 @@ trait Typers extends Modes with Adaptations with PatMatVirtualiser {
      *  @return       ...
      */
     def typedCase(cdef: CaseDef, pattpe: Type, pt: Type): CaseDef = {
+      // poor man's macros =)
+      cdef match {
+        case QuasiquotePattern(qqp) =>
+          try {
+            val result = qqp.expand(context)
+            val trace = scala.tools.nsc.util.trace when settings.Yquasiquotedebug.value
+            trace(qqp.title + ": ")(result)
+            return typedCase(result, WildcardType, pt)
+          } catch {
+            case ex: TypeError =>
+              return errorTree(cdef, ex.msg).asInstanceOf[CaseDef]
+          }
+        case _ =>
+          ;
+      }
+
       // verify no _* except in last position
       for (Apply(_, xs) <- cdef.pat ; x <- xs dropRight 1 ; if treeInfo isStar x)
         error(x.pos, "_* may only come last")
@@ -2239,7 +2255,7 @@ trait Typers extends Modes with Adaptations with PatMatVirtualiser {
               return errorTree("cannot lift at metalevel " + context.metalevel)
           }
         } else if (fun0.symbol.isSplice) {
-          if (context.metalevel == 1) { 
+          if (context.metalevel == 1) {
             val context1 = context.make(tree).atMetalevel(0)
             val typer1 = newTyper(context1)
             return typer1.typed(tree)
@@ -2248,6 +2264,20 @@ trait Typers extends Modes with Adaptations with PatMatVirtualiser {
               return errorTree("cannot splice at metalevel " + context.metalevel)
           }
         }
+      }
+
+      // poor man's macros =)
+      tree match {
+        case QuasiquoteLiteral(qql) =>
+          val result = qql.expand(context)
+          val trace = scala.tools.nsc.util.trace when settings.Yquasiquotedebug.value
+          trace(qql.title + ": ")(result)
+          val context1 = context.make(result)
+          val typer1 = newTyper(context1)
+          val typed = typer1.typed(result)
+          return typed
+        case _ =>
+          ;
       }
 
       if (fun0.tpe != null && fun0.tpe.typeSymbol.isMagic) {
@@ -3513,7 +3543,7 @@ trait Typers extends Modes with Adaptations with PatMatVirtualiser {
                   if (treeInfo.isVariableOrGetter(qual1)) {
                     stopTimer(failedOpEqNanos, opeqStart)
                     convertToAssignment(fun, qual1, name, args, ex)
-                  } 
+                  }
                   else {
                     stopTimer(failedApplyNanos, appStart)
                     reportTypeError(fun.pos, ex)
@@ -3666,7 +3696,7 @@ trait Typers extends Modes with Adaptations with PatMatVirtualiser {
           }
           return typed
         }
-        
+
         val sym =
           if (tree.symbol != NoSymbol) {
             if (phase.erasedTypes && qual.isInstanceOf[Super])
@@ -3836,7 +3866,7 @@ trait Typers extends Modes with Adaptations with PatMatVirtualiser {
           reallyExists(sym) &&
           ((mode & PATTERNmode | FUNmode) != (PATTERNmode | FUNmode) || !sym.isSourceMethod || sym.hasFlag(ACCESSOR))
         }
-        
+
         if (defSym == NoSymbol) {
           var defEntry: ScopeEntry = null // the scope entry of defSym, if defined in a local scope
 
@@ -4421,7 +4451,7 @@ trait Typers extends Modes with Adaptations with PatMatVirtualiser {
                 case ex: TypeError =>
                   None
               }
-              
+
               // attempt #2: auto-lift, for example:
               // val x: Code[Int] = 2 * 5
               // val y = Code.lift{2 * 5} ====> this is processed elsewhere!
@@ -4431,7 +4461,7 @@ trait Typers extends Modes with Adaptations with PatMatVirtualiser {
               // u(2 * 5)
               val result2 = result1.getOrElse {
                 resetAllAttrs(tree)
-                
+
                 if (pt.typeSymbol.isTypedCode) {
                   var generic_lift = Select(Ident(CodeModule), nme.lift_)
                   var typed_lift = TypeApply(generic_lift, List(TypeTree(pt.typeArgs.head)))
@@ -4455,14 +4485,14 @@ trait Typers extends Modes with Adaptations with PatMatVirtualiser {
 //                  lifted setType UcodeClass.tpe
 //                  lifted
                 }
-              } 
-                
+              }
+
               result2
             } else {
               typed1(tree, mode, dropExistential(pt))
             }
           }
-          
+
           printTyping("typed %s: %s%s".format(
             ptTree(tree1), tree1.tpe,
             if (isSingleType(tree1.tpe)) " with underlying "+tree1.tpe.widen else "")

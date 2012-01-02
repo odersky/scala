@@ -367,13 +367,13 @@ trait Definitions extends reflect.api.StandardDefinitions {
     lazy val ReflectPackage = getPackageObject("scala.reflect")
       def Reflect_mirror = getMember(ReflectPackage, "mirror")
 
-
     lazy val PartialManifestClass  = getClass("scala.reflect.ClassManifest")
     lazy val PartialManifestModule = getModule("scala.reflect.ClassManifest")
     lazy val FullManifestClass     = getClass("scala.reflect.Manifest")
     lazy val FullManifestModule    = getModule("scala.reflect.Manifest")
     lazy val OptManifestClass      = getClass("scala.reflect.OptManifest")
     lazy val NoManifest            = getModule("scala.reflect.NoManifest")
+
     lazy val CodeClass             = getClass(sn.Code)
     lazy val CodeModule            = getModule(sn.Code)
          def Code_lift             = getMember(CodeModule, nme.lift_)
@@ -389,6 +389,14 @@ trait Definitions extends reflect.api.StandardDefinitions {
     lazy val MagicClass            = getClass(sn.Magic)
     lazy val MagicObject           = getModule(sn.Magic)
     lazy val MagicMethod           = getMember(MagicClass, newTermName("magic"))
+    
+    lazy val QuasiquoteClass           = getClass("scala.reflect.Quasiquote")
+    lazy val QuasiquoteLiteralClass    = getClass("scala.reflect.QuasiquoteLiteral")
+    lazy val QuasiquotePatternClass    = getClass("scala.reflect.QuasiquotePattern")
+    lazy val StringContextClass        = getClass("scala.runtime.StringContext")
+    lazy val StringContext_show        = getMember(StringContextClass, nme.show_)
+    lazy val FormattedClass            = getClass("scala.runtime.Formatted")
+    lazy val Formatted_show            = getMember(FormattedClass, nme.show_)
 
     lazy val ScalaSignatureAnnotation = getClass("scala.reflect.ScalaSignature")
     lazy val ScalaLongSignatureAnnotation = getClass("scala.reflect.ScalaLongSignature")

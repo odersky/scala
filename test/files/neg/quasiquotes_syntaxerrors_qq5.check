@@ -1,0 +1,25 @@
+quasiquotes_syntaxerrors_qq5.scala:2: error: invalid full splice
+  println(s"${}")
+            ^
+quasiquotes_syntaxerrors_qq5.scala:3: error: invalid full splice
+  println(s"${  }")
+            ^
+quasiquotes_syntaxerrors_qq5.scala:4: error: invalid full splice
+  println(s"${}bar")
+            ^
+quasiquotes_syntaxerrors_qq5.scala:5: error: invalid full splice
+  println(s"${ }bar")
+            ^
+quasiquotes_syntaxerrors_qq5.scala:6: error: invalid full splice
+  println(s"qwe${}")
+               ^
+quasiquotes_syntaxerrors_qq5.scala:7: error: invalid full splice
+  println(s"qwe${   }")
+               ^
+quasiquotes_syntaxerrors_qq5.scala:8: error: invalid full splice
+  println(s"qwe${}bar")
+               ^
+quasiquotes_syntaxerrors_qq5.scala:9: error: invalid full splice
+  println(s"qwe${ }bar")
+               ^
+8 errors found

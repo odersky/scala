@@ -17,4 +17,6 @@ final class StringAdd(self: Any) {
    *  (@see java.lang.String.format).
    */
   def formatted(fmtstr: String): String = fmtstr format self
+
+  def show: String = if (self == null) null else self.toString
 }

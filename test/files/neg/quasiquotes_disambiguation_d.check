@@ -1,0 +1,4 @@
+quasiquotes_disambiguation_d.scala:7: error: ')' expected but string literal found.
+  println(s"foo" "b")
+                 ^
+one error found

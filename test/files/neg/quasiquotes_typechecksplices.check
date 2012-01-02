@@ -1,0 +1,7 @@
+quasiquotes_typechecksplices.scala:2: error: not found: value foo
+  println(s"qwe$foo")
+                ^
+quasiquotes_typechecksplices.scala:3: error: not found: value foo
+  println(s"qwe${foo*bar}")
+                 ^
+two errors found
