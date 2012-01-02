@@ -622,6 +622,7 @@ trait Typers extends Modes with Adaptations with PatMatVirtualiser with Quasiquo
       val includeLocals = qual.tpe match {
         case ThisType(clazz) if callSiteWithinClass(clazz)                => true
         case SuperType(clazz, _) if callSiteWithinClass(clazz.typeSymbol) => true
+        case _ if qual.hasSymbol && qual.symbol.isInstanceOf[FreeVar]     => true
         case _                                                            => phase.next.erasedTypes
       }
       if (includeLocals) qual.tpe member name

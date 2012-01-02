@@ -221,7 +221,8 @@ abstract class Constructors extends Transform with ast.TreeDSL {
 
       // Is symbol known to be accessed outside of the primary constructor,
       // or is it a symbol whose definition cannot be omitted anyway?
-      def mustbeKept(sym: Symbol) = !maybeOmittable(sym) || (accessedSyms contains sym)
+//      def mustbeKept(sym: Symbol) = !maybeOmittable(sym) || (accessedSyms contains sym)
+      def mustbeKept(sym: Symbol) = true
 
       // A traverser to set accessedSyms and outerAccessors
       val accessTraverser = new Traverser {

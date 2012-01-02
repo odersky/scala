@@ -163,7 +163,9 @@ trait ScalaSettings extends AbsScalaSettings
   val Ypmatdebug    = BooleanSetting    ("-Ypmat-debug", "Trace all pattern matcher activity.")
   val Yreifycopypaste =
                       BooleanSetting    ("-Yreify-copypaste", "Dump the reified trees in copypasteable representation.")
-  val Yreifydebug   = BooleanSetting    ("-Yreify-debug", "Trace reification actions.")
+  val Yreifydebug   = BooleanSetting    ("-Yreify-debug", "Trace reification.")
+  val Yreifytyperdebug
+                    = BooleanSetting    ("-Yreifytyper-debug", "Trace typings of reified trees.")
   val Yquasiquotedebug =
                       BooleanSetting    ("-Yquasiquote-debug", "Trace translation of quasiquotes.")
   val Yreplsync     = BooleanSetting    ("-Yrepl-sync", "Do not use asynchronous code for repl startup")

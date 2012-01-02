@@ -235,7 +235,7 @@ trait Trees extends reflect.internal.Trees { self: Global =>
    */
 //  def resetAllAttrs[A<:Tree](x:A): A = { new ResetAttrsTraverser().traverse(x); x }
 //  def resetLocalAttrs[A<:Tree](x:A): A = { new ResetLocalAttrsTraverser().traverse(x); x }
-  
+
   def resetAllAttrs[A<:Tree](x:A): A = new ResetAttrs(false).transform(x)
   def resetLocalAttrs[A<:Tree](x:A): A = new ResetAttrs(true).transform(x)
 
@@ -250,24 +250,26 @@ trait Trees extends reflect.internal.Trees { self: Global =>
    */
   private class ResetAttrs(localOnly: Boolean) {
     val locals = util.HashSet[Symbol](8)
-    
+
     class Traverser extends self.Traverser {
-      def markLocal(tree: Tree) = 
+      def markLocal(tree: Tree) =
         if (tree.symbol != null && tree.symbol != NoSymbol)
           locals addEntry tree.symbol
-      
+
       override def traverse(tree: Tree) = {
         tree match {
-         case _: DefTree | Function(_, _) | Template(_, _, _) => 
+         case _: DefTree | Function(_, _) | Template(_, _, _) =>
+           markLocal(tree)
+         case _ if tree.symbol.isInstanceOf[FreeVar] =>
            markLocal(tree)
          case _ =>
            ;
         }
-        
+
         super.traverse(tree)
       }
     }
-    
+
     class Transformer extends self.Transformer {
       override def transform(tree: Tree): Tree = super.transform {
         tree match {
@@ -293,20 +295,20 @@ trait Trees extends reflect.internal.Trees { self: Global =>
         }
       }
     }
-     
+
     def transform[T <: Tree](x: T): T = {
       new Traverser().traverse(x)
-      
+
       val trace = scala.tools.nsc.util.trace when settings.debug.value
       val eoln = System.getProperty("line.separator")
       trace("locals (%d total): %n".format(locals.size))(locals.toList map {"  " + _} mkString eoln)
-      
+
       val x1 = new Transformer().transform(x)
       assert(x.getClass isInstance x1)
       x1.asInstanceOf[T]
     }
   }
-  
+
   /* New pattern matching cases:
 
    case Parens(expr)                                               (only used during parsing)
