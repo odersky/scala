@@ -2093,7 +2093,7 @@ trait Types extends api.Types { self: SymbolTable =>
       !sym.isTypeParameter && pre.isTrivial && args.forall(_.isTrivial)
 
     override def isNotNull =
-      sym.isModuleClass || sym == NothingClass || isValueClass(sym) || super.isNotNull
+      sym.isModuleClass || sym == NothingClass || isPrimitiveValueClass(sym) || super.isNotNull
 
     override def parents: List[Type] = {
       val cache = parentsCache
@@ -6286,7 +6286,7 @@ trait Types extends api.Types { self: SymbolTable =>
           } else {
             val args = argss map (_.head)
             if (args.tail forall (_ =:= args.head)) Some(typeRef(pre, sym, List(args.head)))
-            else if (args exists (arg => isValueClass(arg.typeSymbol))) Some(ObjectClass.tpe)
+            else if (args exists (arg => isPrimitiveValueClass(arg.typeSymbol))) Some(ObjectClass.tpe)
             else Some(typeRef(pre, sym, List(lub(args))))
           }
         }

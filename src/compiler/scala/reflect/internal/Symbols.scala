@@ -431,7 +431,7 @@ trait Symbols extends api.Symbols { self: SymbolTable =>
     final def isRefinementClass    = isClass && name == tpnme.REFINE_CLASS_NAME
     final def isSourceMethod       = isMethod && !hasFlag(STABLE) // exclude all accessors!!!
     final def isTypeParameter      = isType && isParameter && !isSkolem
-    final def isValueClass         = definitions.isValueClass(this)
+    final def isPrimitiveValueClass = definitions.isPrimitiveValueClass(this)
     final def isVarargsMethod      = isMethod && hasFlag(VARARGS)
 
     /** Package tests */
@@ -489,7 +489,8 @@ trait Symbols extends api.Symbols { self: SymbolTable =>
     // class C extends D( { class E { ... } ... } ). Here, E is a class local to a constructor
     final def isClassLocalToConstructor = isClass && hasFlag(INCONSTRUCTOR)
 
-    final def isInlineClass = isClass && hasAnnotation(ScalaInlineClass)
+    final def isInlineClass = 
+      isClass && info.parents.headOption.getOrElse(AnyClass.tpe).typeSymbol == AnyValClass && !isPrimitiveValueClass
 
     final def isAnonymousClass             = isClass && (name containsName tpnme.ANON_CLASS_NAME)
     final def isAnonymousFunction          = isSynthetic && (name containsName tpnme.ANON_FUN_NAME)

@@ -56,10 +56,10 @@ trait StandardDefinitions { self: Universe =>
      */
     def signature(tp: Type): String
 
-    /** Is symbol one of the value classes? */
-    def isValueClass(sym: Symbol): Boolean
+    /** Is symbol one of the primitive value classes? */
+    def isPrimitiveValueClass(sym: Symbol): Boolean       
 
-    /** Is symbol one of the numeric value classes? */
-    def isNumericValueClass(sym: Symbol): Boolean
+    /** Is symbol one of the primitive numeric value classes? */
+    def isNumericValueClass(sym: Symbol): Boolean   
   }
 }
