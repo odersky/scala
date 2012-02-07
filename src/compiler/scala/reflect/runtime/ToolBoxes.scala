@@ -44,10 +44,12 @@ trait ToolBoxes extends { self: Universe =>
         // !!! Why is this is in the empty package? If it's only to make
         // it inaccessible then please put it somewhere designed for that
         // rather than polluting the empty package with synthetics.
+        trace("typing: ")(showAttributed(tree))
         val ownerClass = EmptyPackageClass.newClassWithInfo(newTypeName("<expression-owner>"), List(ObjectClass.tpe), newScope)
         val owner      = ownerClass.newLocalDummy(tree.pos)
-
-        typer.atOwner(tree, owner).typed(tree, analyzer.EXPRmode, pt)
+        val ttree = typer.atOwner(tree, owner).typed(tree, analyzer.EXPRmode, pt)
+        trace("typed: ")(showAttributed(ttree))
+        ttree
       }
 
       def defOwner(tree: Tree): Symbol = tree find (_.isDef) map (_.symbol) match {
@@ -66,9 +68,7 @@ trait ToolBoxes extends { self: Universe =>
         minfo.decls enter meth
         trace("wrapping ")(defOwner(expr) -> meth)
         val methdef = DefDef(meth, expr changeOwner (defOwner(expr) -> meth))
-        trace("wrapped: ")(showAttributed(methdef))
-        resetAllAttrs(
-          ModuleDef(
+        val moduledef = ModuleDef(
             obj,
             Template(
                 List(TypeTree(ObjectClass.tpe)),
@@ -77,7 +77,11 @@ trait ToolBoxes extends { self: Universe =>
                 List(),
                 List(List()),
                 List(methdef),
-                NoPosition)))
+                NoPosition))
+        trace("wrapped: ")(showAttributed(moduledef))
+        val cleanedUp = resetLocalAttrs(moduledef)
+        trace("cleaned up: ")(showAttributed(cleanedUp))
+        cleanedUp
       }
 
       def wrapInPackage(clazz: Tree): PackageDef =
@@ -91,7 +95,7 @@ trait ToolBoxes extends { self: Universe =>
 
       def compileExpr(expr: Tree, fvs: List[Symbol]): String = {
         val mdef = wrapInObject(expr, fvs)
-        val pdef = trace("wrapped: ")(wrapInPackage(mdef))
+        val pdef = wrapInPackage(mdef)
         val unit = wrapInCompilationUnit(pdef)
         val run = new Run
         run.compileUnits(List(unit), run.namerPhase)
@@ -116,12 +120,15 @@ trait ToolBoxes extends { self: Universe =>
         val jmeth = jclazz.getDeclaredMethods.find(_.getName == wrapperMethodName).get
         val jfield = jclazz.getDeclaredFields.find(_.getName == NameTransformer.MODULE_INSTANCE_NAME).get
         val singleton = jfield.get(null)
-        val result = jmeth.invoke(singleton, fvs map (sym => sym.asInstanceOf[FreeVar].value.asInstanceOf[AnyRef]): _*)
-        if (etpe.typeSymbol != FunctionClass(0)) result
-        else {
-          val applyMeth = result.getClass.getMethod("apply")
-          applyMeth.invoke(result)
-        }
+        // @odersky writes: Not sure we will be able to drop this. I forgot the reason why we dereference () functions,
+        // but there must have been one. So I propose to leave old version in comments to be resurrected if the problem resurfaces.
+//        val result = jmeth.invoke(singleton, fvs map (sym => sym.asInstanceOf[FreeVar].value.asInstanceOf[AnyRef]): _*)
+//        if (etpe.typeSymbol != FunctionClass(0)) result
+//        else {
+//          val applyMeth = result.getClass.getMethod("apply")
+//          applyMeth.invoke(result)
+//        }
+        jmeth.invoke(singleton, fvs map (sym => sym.asInstanceOf[FreeVar].value.asInstanceOf[AnyRef]): _*)
       }
 
       def showAttributed(tree: Tree, printTypes: Boolean = true, printIds: Boolean = true, printKinds: Boolean = false): String = {
@@ -131,7 +138,7 @@ trait ToolBoxes extends { self: Universe =>
         try {
           settings.printtypes.value = printTypes
           settings.uniqid.value = printIds
-          settings.uniqid.value = printKinds
+          settings.Yshowsymkinds.value = printKinds
           tree.toString
         } finally {
           settings.printtypes.value = saved1
@@ -157,7 +164,13 @@ trait ToolBoxes extends { self: Universe =>
       }
 
       command.settings.outputDirs setSingleOutput virtualDirectory
-      new ToolBoxGlobal(command.settings, reporter)
+      val instance = new ToolBoxGlobal(command.settings, reporter)
+
+      // need to establish a run an phase because otherwise we run into an assertion in TypeHistory
+      // that states that the period must be different from NoPeriod
+      val run = new instance.Run
+      instance.phase = run.refchecksPhase
+      instance
     }
 
     lazy val importer = new compiler.Importer {
@@ -169,10 +182,6 @@ trait ToolBoxes extends { self: Universe =>
     lazy val classLoader = new AbstractFileClassLoader(virtualDirectory, defaultReflectiveClassLoader)
 
     private def importAndTypeCheck(tree: rm.Tree, expectedType: rm.Type): compiler.Tree = {
-      // need to establish a run an phase because otherwise we run into an assertion in TypeHistory
-      // that states that the period must be different from NoPeriod
-      val run = new compiler.Run
-      compiler.phase = run.refchecksPhase
       val ctree: compiler.Tree = importer.importTree(tree.asInstanceOf[Tree])
       val pt: compiler.Type = importer.importType(expectedType.asInstanceOf[Type])
 //      val typer = compiler.typer.atOwner(ctree, if (owner.isModule) cowner.moduleClass else cowner)
@@ -189,8 +198,8 @@ trait ToolBoxes extends { self: Universe =>
     def typeCheck(tree: rm.Tree): rm.Tree =
       typeCheck(tree, WildcardType.asInstanceOf[rm.Type])
 
-    def showAttributed(tree: rm.Tree): String =
-      compiler.showAttributed(importer.importTree(tree.asInstanceOf[Tree]))
+    def showAttributed(tree: rm.Tree, printTypes: Boolean = true, printIds: Boolean = true, printKinds: Boolean = false): String =
+      compiler.showAttributed(importer.importTree(tree.asInstanceOf[Tree]), printTypes, printIds, printKinds)
 
     def runExpr(tree: rm.Tree, expectedType: rm.Type): Any = {
       val ttree = importAndTypeCheck(tree, expectedType)
