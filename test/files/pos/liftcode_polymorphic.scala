@@ -6,6 +6,6 @@ object Append extends Application {
       case x::xs => x :: append(xs, l2)
     }
 
-  println(scala.reflect.Code.lift(append _).tree)
+  println(scala.reflect.mirror.reify(append _).tree)
 }
 

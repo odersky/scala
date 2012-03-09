@@ -1,0 +1,2 @@
+prefix = Expr[Test.outer.Macros.type](Test.this.outer.Macros)
+it works

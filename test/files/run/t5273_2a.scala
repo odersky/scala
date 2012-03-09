@@ -3,7 +3,7 @@ import scala.tools.nsc.Settings
 import reflect.runtime.Mirror.ToolBox
 
 object Test extends App {
-  val code = scala.reflect.Code.lift{
+  val code = scala.reflect.mirror.reify{
     val foo :: bar :: _ = List(1, 2, 3)
     println(foo * bar)
   };

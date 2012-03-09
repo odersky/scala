@@ -6,7 +6,7 @@ object Test extends App{
   case class Queryable2[T]() { def filter(predicate: T => Boolean) = ??? }
   trait CoffeesTable{ def sales : Int }
   val q = Queryable2[CoffeesTable]()
-  val code = scala.reflect.Code.lift{q.filter(_.sales > 5)}
+  val code = scala.reflect.mirror.reify{q.filter(_.sales > 5)}
 
   val reporter = new ConsoleReporter(new Settings)
   val toolbox = new ToolBox(reporter)

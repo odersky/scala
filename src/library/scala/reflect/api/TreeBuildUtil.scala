@@ -1,6 +1,6 @@
 package scala.reflect.api
 
-trait TreeBuildUtil extends Universe {
+trait TreeBuildUtil { self: Universe =>
 
   /** The symbol corresponding to the globally accessible class with the
    *  given fully qualified name `fullName`.

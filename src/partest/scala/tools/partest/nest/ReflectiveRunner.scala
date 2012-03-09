@@ -58,7 +58,7 @@ class ReflectiveRunner {
     // this is a workaround for https://issues.scala-lang.org/browse/SI-5433
     // when that bug is fixed, this paragraph of code can be safely removed
     // we hack into the classloader that will become parent classloader for scalac
-    // this way we ensure that reflective macro lookup will pick correct Code.lift
+    // this way we ensure that reification macros in codelib.jar (if any) override standard reification macros
     sepLoader = new URLClassLoader((PathSettings.srcCodeLib +: files) map (_.toURL), null)
 
     if (isPartestDebug)

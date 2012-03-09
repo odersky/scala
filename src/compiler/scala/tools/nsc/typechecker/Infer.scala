@@ -67,7 +67,7 @@ trait Infer {
    */
   def freshVar(tparam: Symbol): TypeVar = TypeVar(tparam)
 
-  private class NoInstance(msg: String) extends Throwable(msg) with ControlThrowable { }
+  class NoInstance(msg: String) extends Throwable(msg) with ControlThrowable { }
   private class DeferredNoInstance(getmsg: () => String) extends NoInstance("") {
     override def getMessage(): String = getmsg()
   }
@@ -311,6 +311,8 @@ trait Infer {
     /** This is overridden in the Typer.infer with some logic, but since
      *  that's the only place in the compiler an Inferencer is ever created,
      *  I suggest this should either be abstract or have the implementation.
+     *  [Martin] I think Infer is also created by Erasure, with the default
+     *  implementation of isCoercible
      */
     def isCoercible(tp: Type, pt: Type): Boolean = false
 
@@ -420,6 +422,9 @@ trait Infer {
         tvars map (tvar => WildcardType)
     }
 
+    /** [Martin] Can someone comment this please? I have no idea what it's for
+     *  and the code is not exactly readable.
+     */
     object AdjustedTypeArgs {
       val Result = collection.mutable.LinkedHashMap
       type Result = collection.mutable.LinkedHashMap[Symbol, Option[Type]]
@@ -1539,9 +1544,9 @@ trait Infer {
       else infer
     }
 
-    /** Assign <code>tree</code> the type of unique polymorphic alternative
+    /** Assign <code>tree</code> the type of all polymorphic alternatives
      *  with <code>nparams</code> as the number of type parameters, if it exists.
-     *  If several or none such polymorphic alternatives exist, error.
+     *  If no such polymorphic alternative exist, error.
      *
      *  @param tree ...
      *  @param nparams ...

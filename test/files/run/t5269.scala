@@ -3,7 +3,7 @@ import scala.tools.nsc.Settings
 import reflect.runtime.Mirror.ToolBox
 
 object Test extends App {
-  val code = scala.reflect.Code.lift{
+  val code = scala.reflect.mirror.reify{
     trait Z {
       val z = 2
     }

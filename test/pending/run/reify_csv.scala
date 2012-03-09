@@ -18,7 +18,7 @@ object Test extends App {
   val fields = csv.head.split(";").map{_.trim()}.toList
   println(fields)
 
-  val code = scala.reflect.Code.lift({
+  val code = scala.reflect.mirror.reify({
     object Csv {
       case class record(`phase name`: String, id: String, description: String)
 

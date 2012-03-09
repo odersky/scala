@@ -1,0 +1,15 @@
+(fooBString,Expr[Test.dd.type](Test.this.dd),42)
+(fooDInt,Expr[Test.dd.type](Test.this.dd),42)
+fooBBoolean
+(fooBString,Expr[Test.db.type](Test.this.db),42)
+(fooBInt,Expr[Test.db.type](Test.this.db),42)
+fooBBoolean
+(fooZString,Expr[Test.zz.type](Test.this.zz),42)
+(fooDInt,Expr[Test.zz.type](Test.this.zz),42)
+fooZBoolean
+(fooBString,Expr[Test.zd.type](Test.this.zd),42)
+(fooDInt,Expr[Test.zd.type](Test.this.zd),42)
+fooZBoolean
+(fooBString,Expr[Test.zb.type](Test.this.zb),42)
+(fooBInt,Expr[Test.zb.type](Test.this.zb),42)
+fooZBoolean

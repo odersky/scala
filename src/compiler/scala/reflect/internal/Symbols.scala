@@ -51,6 +51,15 @@ trait Symbols extends api.Symbols { self: SymbolTable =>
   def newFreeVar(name: TermName, tpe: Type, value: Any, newFlags: Long = 0L): FreeVar =
     new FreeVar(name, value) initFlags newFlags setInfo tpe
 
+  /** Mark a variable as captured; i.e. force boxing in a *Ref type.
+   */
+  def captureVariable(vble: Symbol): Unit = vble setFlag CAPTURED
+
+  /** Mark given identifier as a reference to a captured variable itself
+   *  suppressing dereferencing with the `elem` field.
+   */
+  def referenceCapturedVariable(vble: Symbol): Tree = ReferenceToBoxed(Ident(vble))
+
   /** The original owner of a class. Used by the backend to generate
    *  EnclosingMethod attributes.
    */
@@ -607,7 +616,8 @@ trait Symbols extends api.Symbols { self: SymbolTable =>
     // are a case accessor (you can also be a field.)
     def isCaseAccessorMethod = isMethod && isCaseAccessor
 
-    def isMacro = isMethod && hasFlag(MACRO)
+    def isTermMacro = name.isTermName && hasFlag(MACRO)
+    def isTypeMacro = name.isTypeName && hasFlag(MACRO)
 
     /** Does this symbol denote the primary constructor of its enclosing class? */
     final def isPrimaryConstructor =
@@ -1169,7 +1179,7 @@ trait Symbols extends api.Symbols { self: SymbolTable =>
      *  which immediately follows any of parser, namer, typer, or erasure.
      *  In effect that means this will return one of:
      *
-     *    - packageobjects (follows namer) 
+     *    - packageobjects (follows namer)
      *    - superaccessors (follows typer)
      *    - lazyvals       (follows erasure)
      *    - null
@@ -1958,7 +1968,8 @@ trait Symbols extends api.Symbols { self: SymbolTable =>
     private case class SymbolKind(accurate: String, sanitized: String, abbreviation: String)
     private def symbolKind: SymbolKind = {
       val kind =
-        if (isInstanceOf[FreeVar]) ("free variable", "free variable", "FV")
+        if (isTermMacro) ("macro method", "macro method", "MAC")
+        else if (isInstanceOf[FreeVar]) ("free variable", "free variable", "FV")
         else if (isPackage) ("package", "package", "PK")
         else if (isPackageClass) ("package class", "package", "PKC")
         else if (isPackageObject) ("package object", "package", "PKO")
@@ -2758,7 +2769,7 @@ trait Symbols extends api.Symbols { self: SymbolTable =>
     assert(validFrom != NoPeriod)
     override def toString() =
       "TypeHistory(" + phaseOf(validFrom)+":"+runId(validFrom) + "," + info + "," + prev + ")"
-    
+
     def toList: List[TypeHistory] = this :: ( if (prev eq null) Nil else prev.toList )
   }
 }

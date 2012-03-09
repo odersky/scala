@@ -310,7 +310,7 @@ class PartestTask extends Task with CompilationPathProperty {
     // this is a workaround for https://issues.scala-lang.org/browse/SI-5433
     // when that bug is fixed, this paragraph of code can be safely removed
     // we hack into the classloader that will become parent classloader for scalac
-    // this way we ensure that reflective macro lookup will pick correct Code.lift
+    // this way we ensure that reification macros in codelib.jar (if any) override standard reification macros
     val loader = getClass.getClassLoader.asInstanceOf[org.apache.tools.ant.AntClassLoader]
     val path = new org.apache.tools.ant.types.Path(getProject())
     val newClassPath = ClassPath.join(nest.PathSettings.srcCodeLib.toString, loader.getClasspath)

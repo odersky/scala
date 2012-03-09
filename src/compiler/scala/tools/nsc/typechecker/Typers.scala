@@ -796,7 +796,7 @@ trait Typers extends Modes with Adaptations with PatMatVirtualiser {
           case Block(_, tree1) => tree1.symbol
           case _               => tree.symbol
         }
-        if (!meth.isConstructor && !meth.isMacro && isFunctionType(pt)) { // (4.2)
+        if (!meth.isConstructor && !meth.isTermMacro && isFunctionType(pt)) { // (4.2)
           debuglog("eta-expanding " + tree + ":" + tree.tpe + " to " + pt)
           checkParamsConvertible(tree, tree.tpe)
           val tree0 = etaExpand(context.unit, tree)
@@ -933,7 +933,7 @@ trait Typers extends Modes with Adaptations with PatMatVirtualiser {
           adaptToImplicitMethod(mt)
 
         case mt: MethodType if (((mode & (EXPRmode | FUNmode | LHSmode)) == EXPRmode) &&
-          (context.undetparams.isEmpty || inPolyMode(mode))) =>
+          (context.undetparams.isEmpty || inPolyMode(mode))) && !(tree.symbol != null && tree.symbol.isTermMacro) =>
           instantiateToMethodType(mt)
 
         case _ =>
@@ -946,10 +946,22 @@ trait Typers extends Modes with Adaptations with PatMatVirtualiser {
           }
           if (tree.isType)
             adaptType()
-          else if (inExprModeButNot(mode, FUNmode) && tree.symbol != null && tree.symbol.isMacro && !tree.isDef && !(tree exists (_.isErroneous)))
+          else if (inExprModeButNot(mode, FUNmode) &&                                 // typechecking application
+                   !tree.isDef && tree.symbol != null && tree.symbol.isTermMacro &&   // of a macro
+                   !tree.symbol.isErroneous &&                                        // macro definition is not erroneous
+                   !(tree exists (_.isErroneous)))                                    // macro arguments are not erroneous
             macroExpand(tree, this) match {
               case Some(expanded: Tree) =>
-                typed(expanded, mode, pt)
+                // @xeno.by: need to enable implicits here, since we're in adapt, which disables them
+                val typechecked = context.withImplicitsEnabled(typed(expanded, mode, pt))
+
+                if (macroCopypaste && macroTyperDebug) {
+                  if (macroDebug) println("========TYPECHECKED2=========")
+                  println(showRaw(typechecked))
+                  if (macroDebug) println("=============================")
+                }
+
+                typechecked
               case None =>
                 setError(tree) // error already reported
             }
@@ -1791,8 +1803,10 @@ trait Typers extends Modes with Adaptations with PatMatVirtualiser {
                meth.owner.isAnonOrRefinementClass))
             InvalidConstructorDefError(ddef)
           typed(ddef.rhs)
-        } else if (meth.isMacro) {
-          EmptyTree
+        } else if (meth.isTermMacro) {
+          // typechecking macro bodies is sort of unconventional
+          // that's why we employ our custom typing scheme orchestrated outside of the typer
+          transformedOr(ddef.rhs, typedMacroBody(ddef, this))
         } else {
           transformedOrTyped(ddef.rhs, EXPRmode, tpt1.tpe)
         }
@@ -2174,7 +2188,7 @@ trait Typers extends Modes with Adaptations with PatMatVirtualiser {
               var e1 = scope.lookupNextEntry(e)
               while ((e1 ne null) && e1.owner == scope) {
                 if (!accesses(e.sym, e1.sym) && !accesses(e1.sym, e.sym) &&
-                    (e.sym.isType || inBlock || (e.sym.tpe matches e1.sym.tpe) || e.sym.isMacro && e1.sym.isMacro))
+                    (e.sym.isType || inBlock || (e.sym.tpe matches e1.sym.tpe)))
                   // default getters are defined twice when multiple overloads have defaults. an
                   // error for this is issued in RefChecks.checkDefaultsInOverloaded
                   if (!e.sym.isErroneous && !e1.sym.isErroneous && !e.sym.hasDefaultFlag &&
@@ -2422,6 +2436,11 @@ trait Typers extends Modes with Adaptations with PatMatVirtualiser {
           def tryNamesDefaults: Tree = {
             val lencmp = compareLengths(args, formals)
 
+            def checkNotMacro() = {
+              if (fun.symbol != null && fun.symbol.filter(sym => sym != null && sym.isTermMacro) != NoSymbol)
+                duplErrorTree(NamedAndDefaultArgumentsNotSupportedForMacros(tree, fun))
+            }
+
             if (mt.isErroneous) duplErrTree
             else if (inPatternMode(mode)) {
               // #2064
@@ -2440,8 +2459,10 @@ trait Typers extends Modes with Adaptations with PatMatVirtualiser {
               else if (isIdentity(argPos) && !isNamedApplyBlock(fun)) {
                 // if there's no re-ordering, and fun is not transformed, no need to transform
                 // more than an optimization, e.g. important in "synchronized { x = update-x }"
+                checkNotMacro()
                 doTypedApply(tree, fun, namelessArgs, mode, pt)
               } else {
+                checkNotMacro()
                 transformNamedApplication(Typer.this, mode, pt)(
                                           treeCopy.Apply(tree, fun, namelessArgs), argPos)
               }
@@ -2449,6 +2470,7 @@ trait Typers extends Modes with Adaptations with PatMatVirtualiser {
               // defaults are needed. they are added to the argument list in named style as
               // calls to the default getters. Example:
               //  foo[Int](a)()  ==>  foo[Int](a)(b = foo$qual.foo$default$2[Int](a))
+              checkNotMacro()
               val fun1 = transformNamedApplication(Typer.this, mode, pt)(fun, x => x)
               if (fun1.isErroneous) duplErrTree
               else {
@@ -3119,7 +3141,7 @@ trait Typers extends Modes with Adaptations with PatMatVirtualiser {
         println(s)
     }
 
-    protected def typed1(tree: Tree, mode: Int, pt: Type): Tree = {
+    def typed1(tree: Tree, mode: Int, pt: Type): Tree = {
       def isPatternMode = inPatternMode(mode)
 
       //Console.println("typed1("+tree.getClass()+","+Integer.toHexString(mode)+","+pt+")")
@@ -4244,7 +4266,13 @@ trait Typers extends Modes with Adaptations with PatMatVirtualiser {
           typedNew(tpt)
 
         case Typed(expr, Function(List(), EmptyTree)) =>
-          typedEta(checkDead(typed1(expr, mode, pt)))
+          val expr1 = context.withMacrosDisabled(typed1(expr, mode, pt))
+          expr1 match {
+            case macroDef if macroDef.symbol.isTermMacro =>
+              MacroEtaError(expr1)
+            case _ =>
+              typedEta(checkDead(expr1))
+          }
 
         case Typed(expr0, tpt @ Ident(tpnme.WILDCARD_STAR))  =>
           val expr = typed(expr0, onlyStickyModes(mode), WildcardType)
@@ -4625,14 +4653,33 @@ trait Typers extends Modes with Adaptations with PatMatVirtualiser {
     def typedTypeConstructor(tree: Tree): Tree = typedTypeConstructor(tree, NOmode)
 
     def computeType(tree: Tree, pt: Type): Type = {
+      assert(!context.owner.isTermMacro, context.owner)
       val tree1 = typed(tree, pt)
       transformed(tree) = tree1
       packedType(tree1, context.owner)
     }
 
+    def computeMacroDefType(tree: Tree, pt: Type): Type = {
+      assert(context.owner.isTermMacro, context.owner)
+      assert(tree.symbol.isTermMacro, tree.symbol)
+      assert(tree.isInstanceOf[DefDef], tree.getClass)
+      val ddef = tree.asInstanceOf[DefDef]
+
+      val tree1 = typedMacroBody(ddef, this)
+      transformed(ddef.rhs) = tree1
+
+      val isMacroBodyOkay = !tree.symbol.isErroneous && !(tree1 exists (_.isErroneous))
+      if (isMacroBodyOkay) macroExpansionTypeFromMacroBody(tree.symbol, tree1) else AnyClass.tpe
+    }
+
     def transformedOrTyped(tree: Tree, mode: Int, pt: Type): Tree = transformed.get(tree) match {
       case Some(tree1) => transformed -= tree; tree1
       case None => typed(tree, mode, pt)
+    }
+
+    def transformedOr(tree: Tree, op: => Tree): Tree = transformed.get(tree) match {
+      case Some(tree1) => transformed -= tree; tree1
+      case None => op
     }
 
     def findManifest(tp: Type, full: Boolean) = beforeTyper {

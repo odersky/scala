@@ -7,6 +7,10 @@ trait Symbols { self: Universe =>
 
   abstract class AbsSymbol { this: Symbol =>
 
+    /** The position of this symbol
+     */
+    def pos: Position
+
     /** The modifiers of this symbol
      */
     def modifiers: Set[Modifier]

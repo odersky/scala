@@ -1,7 +1,7 @@
 import java.lang.Class
 import scala.reflect.mirror._
 import scala.reflect.runtime.Mirror.ToolBox
-import scala.reflect.Code
+import scala.reflect.mirror
 
 final class table extends StaticAnnotation
 @table class A

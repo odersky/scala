@@ -1,0 +1,4 @@
+foo_targs:
+invoking foo_targs...
+type of prefix is: Macros[Int]
+U is: String

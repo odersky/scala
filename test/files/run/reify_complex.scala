@@ -3,7 +3,7 @@ import scala.tools.nsc.Settings
 import reflect.runtime.Mirror.ToolBox
 
 object Test extends App {
-  val code = scala.reflect.Code.lift{
+  val code = scala.reflect.mirror.reify{
     class Complex(val re: Double, val im: Double) {
       def + (that: Complex) =
         new Complex(re + that.re, im + that.im)

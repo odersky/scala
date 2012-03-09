@@ -4,7 +4,7 @@ import reflect.runtime.Mirror.ToolBox
 
 object Test extends App {
   def foo[T](ys: List[T]): Int => Int = {
-    val fun = reflect.Code.lift{(x: Int) => {
+    val fun = reflect.mirror.reify{(x: Int) => {
       x + ys.length
     }}
 

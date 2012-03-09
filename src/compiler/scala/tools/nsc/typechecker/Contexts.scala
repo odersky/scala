@@ -120,6 +120,7 @@ trait Contexts { self: Analyzer =>
 
     var diagnostic: List[String] = Nil      // these messages are printed when issuing an error
     var implicitsEnabled = false
+    var macrosEnabled = true
     var checking = false
     var retyping = false
 
@@ -182,11 +183,32 @@ trait Contexts { self: Analyzer =>
 
     def logError(err: AbsTypeError) = buffer += err
 
+    def withImplicitsEnabled[T](op: => T): T = {
+      val saved = implicitsEnabled
+      implicitsEnabled = true
+      try op
+      finally implicitsEnabled = saved
+    }
+
     def withImplicitsDisabled[T](op: => T): T = {
       val saved = implicitsEnabled
       implicitsEnabled = false
       try op
       finally implicitsEnabled = saved
+    }
+
+    def withMacrosEnabled[T](op: => T): T = {
+      val saved = macrosEnabled
+      macrosEnabled = true
+      try op
+      finally macrosEnabled = saved
+    }
+
+    def withMacrosDisabled[T](op: => T): T = {
+      val saved = macrosEnabled
+      macrosEnabled = false
+      try op
+      finally macrosEnabled = saved
     }
 
     def make(unit: CompilationUnit, tree: Tree, owner: Symbol,

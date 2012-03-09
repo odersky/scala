@@ -11,6 +11,15 @@ import api.Modifier
 
 trait Trees extends api.Trees { self: SymbolTable =>
 
+  /** Marks underlying reference to id as boxed.
+   *  @pre: id must refer to a captured variable
+   *  A reference such marked will refer to the boxed entity, no dereferencing
+   *  with `.elem` is done on it.
+   *  This tree node can be emitted by macros such as reify that call markBoxedReference.
+   *  It is eliminated in LambdaLift, where the boxing conversion takes place.
+   */
+  case class ReferenceToBoxed(ident: Ident) extends TermTree
+
   // --- modifiers implementation ---------------------------------------
 
   /** @param privateWithin the qualifier for a private (a type name)
@@ -225,7 +234,8 @@ trait Trees extends api.Trees { self: SymbolTable =>
     }
 
   /** casedef shorthand */
-  def CaseDef(pat: Tree, body: Tree): CaseDef = CaseDef(pat, EmptyTree, body)
+  def CaseDef(pat: Tree, body: Tree): CaseDef =
+    CaseDef(pat, EmptyTree, body)
 
   def Bind(sym: Symbol, body: Tree): Bind =
     Bind(sym.name, body) setSymbol sym
@@ -239,10 +249,40 @@ trait Trees extends api.Trees { self: SymbolTable =>
   def Apply(sym: Symbol, args: Tree*): Tree =
     Apply(Ident(sym), args.toList)
 
+  /** Factory method for object creation `new tpt(args_1)...(args_n)`
+   *  A `New(t, as)` is expanded to: `(new t).<init>(as)`
+   */
+  def New(tpt: Tree, argss: List[List[Tree]]): Tree = {
+    val superRef: Tree = Select(New(tpt), nme.CONSTRUCTOR)
+    if (argss.isEmpty) Apply(superRef, Nil)
+    else (superRef /: argss) (Apply)
+  }
+
+  /** 0-1 argument list new, based on a type.
+   */
+  def New(tpe: Type, args: Tree*): Tree =
+    New(TypeTree(tpe), List(args.toList))
+
   def New(sym: Symbol, args: Tree*): Tree =
     New(sym.tpe, args: _*)
 
-  def Super(sym: Symbol, mix: TypeName): Tree = Super(This(sym), mix)
+  def Super(sym: Symbol, mix: TypeName): Tree =
+    Super(This(sym), mix)
+
+  def This(sym: Symbol): Tree =
+    This(sym.name.toTypeName) setSymbol sym
+
+  def Select(qualifier: Tree, name: String): Select =
+    Select(qualifier, newTermName(name))
+
+  def Select(qualifier: Tree, sym: Symbol): Select =
+    Select(qualifier, sym.name) setSymbol sym
+
+  def Ident(name: String): Ident =
+    Ident(newTermName(name))
+
+  def Ident(sym: Symbol): Ident =
+    Ident(sym.name) setSymbol sym
 
   /** Block factory that flattens directly nested blocks.
    */

@@ -6,7 +6,7 @@ import java.lang.reflect.Array
 
 /** The mirror for standard runtime reflection from Java.
  */
-class Mirror extends Universe with RuntimeTypes with TreeBuildUtil with ToolBoxes with api.Mirror {
+class Mirror extends Universe with RuntimeTypes with ToolBoxes with api.Mirror {
 
   definitions.init()
 

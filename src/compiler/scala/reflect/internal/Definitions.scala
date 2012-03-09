@@ -398,7 +398,6 @@ trait Definitions extends reflect.api.StandardDefinitions {
 
     // scala.reflect
     lazy val ReflectApiUniverse = getRequiredClass("scala.reflect.api.Universe")
-    lazy val ReflectMacroContext = getRequiredClass("scala.reflect.macro.Context")
     lazy val ReflectRuntimeMirror = getRequiredModule("scala.reflect.runtime.Mirror")
       def freeValueMethod = getMember(ReflectRuntimeMirror, nme.freeValue)
     lazy val ReflectPackage = getPackageObject("scala.reflect")
@@ -410,6 +409,22 @@ trait Definitions extends reflect.api.StandardDefinitions {
     lazy val FullManifestModule    = getRequiredModule("scala.reflect.Manifest")
     lazy val OptManifestClass      = getRequiredClass("scala.reflect.OptManifest")
     lazy val NoManifest            = getRequiredModule("scala.reflect.NoManifest")
+
+    lazy val ExprClass     = getMember(getRequiredClass("scala.reflect.api.Exprs"), tpnme.Expr)
+         def ExprTree      = getMember(ExprClass, nme.tree)
+         def ExprTpe       = getMember(ExprClass, nme.tpe)
+         def ExprEval      = getMember(ExprClass, nme.eval)
+         def ExprValue     = getMember(ExprClass, nme.value)
+    lazy val ExprModule    = getMember(getRequiredClass("scala.reflect.api.Exprs"), nme.Expr)
+    lazy val TypeTagClass  = getMember(getRequiredClass("scala.reflect.api.TypeTags"), tpnme.TypeTag)
+         def TypeTagTpe    = getMember(TypeTagClass, nme.tpe)
+    lazy val TypeTagModule = getMember(getRequiredClass("scala.reflect.api.TypeTags"), nme.TypeTag)
+
+    lazy val MacroContextClass       = getRequiredClass("scala.reflect.makro.Context")
+         def MacroContextPrefix      = getMember(MacroContextClass, nme.prefix)
+         def MacroContextPrefixType  = getMember(MacroContextClass, tpnme.PrefixType)
+         def MacroContextMirror      = getMember(MacroContextClass, nme.mirror)
+    lazy val MacroImplAnnotation     = getRequiredClass("scala.reflect.makro.internal.macroImpl")
 
     lazy val ScalaSignatureAnnotation = getRequiredClass("scala.reflect.ScalaSignature")
     lazy val ScalaLongSignatureAnnotation = getRequiredClass("scala.reflect.ScalaLongSignature")

@@ -6,7 +6,7 @@ import reflect.runtime.Mirror.ToolBox
 
 object Test extends App {
   // test 1: reify
-  val tree = scala.reflect.Code.lift{
+  val tree = scala.reflect.mirror.reify{
     class ann(bar: List[String]) extends StaticAnnotation
 
     @ann(bar=List("1a")) @ann(bar=List("1b")) class C[@ann(bar=List("2a")) @ann(bar=List("2b")) T](@ann(bar=List("3a")) @ann(bar=List("3b")) x: T @ann(bar=List("4a")) @ann(bar=List("4b"))) {

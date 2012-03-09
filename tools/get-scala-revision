@@ -23,8 +23,8 @@ ensure_tag () {
 # tags are screwed up or stale, we should still have a reference
 # point for a build string.
 ensure_tag 58cb15c40d v2.10.0-M1
-ensure_tag 29f3eace1e v2.9.1
-ensure_tag b0d78f6b9c v2.8.2
+#ensure_tag 29f3eace1e v2.9.1
+#ensure_tag b0d78f6b9c v2.8.2
 
 # the closest tag, obtained separately because we have to
 # reconstruct the string around the padded distance.

@@ -168,6 +168,10 @@ trait ScalaSettings extends AbsScalaSettings
                       BooleanSetting    ("-Yreify-copypaste", "Dump the reified trees in copypasteable representation.")
   val Yreifydebug   = BooleanSetting    ("-Yreify-debug", "Trace reification.")
   val Ymacrodebug   = BooleanSetting    ("-Ymacro-debug", "Trace macro-related activities: generation of synthetics, expansion, exceptions.")
+  val Ymacrotyperdebug =
+                      BooleanSetting    ("-Ymacro-typerdebug", "Trace macro-related typechecking activities: resolution of type tags, two-phase typechecking of expansions.")
+  val Ymacrocopypaste =
+                      BooleanSetting    ("-Ymacro-copypaste", "Dump macro expansions in copypasteable representation.")
   val Yreplsync     = BooleanSetting    ("-Yrepl-sync", "Do not use asynchronous code for repl startup")
   val Yrepldebug    = BooleanSetting    ("-Yrepl-debug", "Trace all repl activity.") .
                                           withPostSetHook(_ => interpreter.replProps.debug setValue true)

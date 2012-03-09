@@ -3,7 +3,7 @@ import scala.tools.nsc.Settings
 import reflect.runtime.Mirror.ToolBox
 
 object Test extends App {
-  val code = scala.reflect.Code.lift{
+  val code = scala.reflect.mirror.reify{
     implicit def arrayWrapper[A : ClassManifest](x: Array[A]) =
       new {
         def sort(p: (A, A) => Boolean) = {

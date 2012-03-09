@@ -5,7 +5,7 @@ package api
  *  runtime entities such as class names and object instances
  *  with a reflexive universe.
  */
-trait Mirror extends Universe with RuntimeTypes with TreeBuildUtil {
+trait Mirror extends Universe with RuntimeTypes {
 
   /** The Scala class symbol that has given fully qualified name
    *  @param name  The fully qualified name of the class to be returned

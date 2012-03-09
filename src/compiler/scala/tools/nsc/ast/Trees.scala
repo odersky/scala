@@ -37,15 +37,6 @@ trait Trees extends reflect.internal.Trees { self: Global =>
   /** emitted by typer, eliminated by refchecks */
   case class TypeTreeWithDeferredRefCheck()(val check: () => TypeTree) extends TypTree
 
-  /** Marks underlying reference to id as boxed.
-   *  @pre: id must refer to a captured variable
-   *  A reference such marked will refer to the boxed entity, no dereferencing
-   *  with `.elem` is done on it.
-   *  This tree node can be emitted by macros such as reify that call markBoxedReference.
-   *  It is eliminated in LambdaLift, where the boxing conversion takes place.
-   */
-  case class ReferenceToBoxed(idt: Ident) extends TermTree
-
   // --- factory methods ----------------------------------------------------------
 
     /** Generates a template with constructor corresponding to
@@ -331,6 +322,7 @@ trait Trees extends reflect.internal.Trees { self: Global =>
 
    case Parens(expr)                                               (only used during parsing)
    case DocDef(comment, defn) =>                                   (eliminated by typer)
+   case ReferenceToBoxed(ident) =>                                 (created by typer, eliminated by lambdalift)
    case TypeTreeWithDeferredRefCheck() =>                          (created and eliminated by typer)
    case SelectFromArray(_, _, _) =>                                (created and eliminated by erasure)
 

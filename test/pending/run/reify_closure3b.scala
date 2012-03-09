@@ -7,7 +7,7 @@ object Test extends App {
     class Foo(y: Int) {
       def y1 = y
 
-      val fun = reflect.Code.lift{(x: Int) => {
+      val fun = reflect.mirror.reify{(x: Int) => {
         x + y1
       }}
     }

@@ -344,6 +344,11 @@ trait ContextErrors {
         setError(tree)
       }
 
+      def MacroEtaError(tree: Tree) = {
+        issueNormalTypeError(tree, "macros cannot be eta-expanded")
+        setError(tree)
+      }
+
       //typedReturn
       def ReturnOutsideOfDefError(tree: Tree) = {
         issueNormalTypeError(tree, "return outside method definition")
@@ -459,6 +464,9 @@ trait ContextErrors {
 
       // doTypeApply
       //tryNamesDefaults
+      def NamedAndDefaultArgumentsNotSupportedForMacros(tree: Tree, fun: Tree) =
+        NormalTypeError(tree, "macros applications do not support named and/or default arguments")
+
       def WrongNumberOfArgsError(tree: Tree, fun: Tree) =
         NormalTypeError(tree, "wrong number of arguments for "+ treeSymTypeMsg(fun))
 
@@ -635,7 +643,6 @@ trait ContextErrors {
       def DefDefinedTwiceError(sym0: Symbol, sym1: Symbol) = {
         val isBug = sym0.isAbstractType && sym1.isAbstractType && (sym0.name startsWith "_$")
         issueSymbolTypeError(sym0, sym1+" is defined twice in " + context0.unit
-          + ( if (sym0.isMacro && sym1.isMacro) "\n(note that macros cannot be overloaded)" else "" )
           + ( if (isBug) "\n(this error is likely due to a bug in the scala compiler involving wildcards in package objects)" else "" )
         )
       }

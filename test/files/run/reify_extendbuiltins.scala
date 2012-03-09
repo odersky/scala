@@ -3,7 +3,7 @@ import scala.tools.nsc.Settings
 import reflect.runtime.Mirror.ToolBox
 
 object Test extends App {
-  val code = scala.reflect.Code.lift{
+  val code = scala.reflect.mirror.reify{
     def fact(n: Int): BigInt =
       if (n == 0) 1 else fact(n-1) * n
     class Factorizer(n: Int) {

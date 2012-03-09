@@ -277,6 +277,7 @@ object Manifest {
    *  into manfifests is completely analogous to splicing code blocks into
    *  code blocks. Manifest[T] and Code[T] are really the same thing, only one
    *  works for types, the other for trees.
+   *  upd. Manifest became Universe#TypeTag, and Code became Universe#Expr
    *  Another complication is that once we generate manifests from types, we really
    *  should have reflection as a standard component shipped with the standard library,
    *  instead of in scala-compiler.jar.

@@ -588,7 +588,7 @@ abstract class Erasure extends AddInterfaces
 
     /** A replacement for the standard typer's `typed1` method.
      */
-    override protected def typed1(tree: Tree, mode: Int, pt: Type): Tree = {
+    override def typed1(tree: Tree, mode: Int, pt: Type): Tree = {
       val tree1 = try {
         super.typed1(adaptMember(tree), mode, pt)
       } catch {

@@ -3,7 +3,7 @@ import scala.tools.nsc.Settings
 import reflect.runtime.Mirror.ToolBox
 
 object Test extends App {
-  val code = scala.reflect.Code.lift{
+  val code = scala.reflect.mirror.reify{
     object Persons {
       /** A list of persons. To create a list, we use Predef.List
        *  which takes a variable number of arguments and constructs

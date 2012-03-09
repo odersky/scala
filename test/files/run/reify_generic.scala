@@ -3,7 +3,7 @@ import scala.tools.nsc.Settings
 import reflect.runtime.Mirror.ToolBox
 
 object Test extends App {
-  val code = scala.reflect.Code.lift{
+  val code = scala.reflect.mirror.reify{
     val product = List(1, 2, 3).head * List[Any](4, 2, 0).head.asInstanceOf[Int]
     println(product)
   };

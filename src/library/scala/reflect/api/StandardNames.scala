@@ -17,5 +17,6 @@ trait StandardNames { self: Universe =>
   val tpnme: AbsTypeNames
 
   abstract class AbsTypeNames {
+    val WILDCARD_STAR: TypeName
   }
 }

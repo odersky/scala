@@ -520,7 +520,9 @@ class Worker(val fileManager: FileManager, params: TestRunParams) extends Actor 
       runTestCommon(file, expectFailure = false)((logFile, outDir) => {
         val dir      = file.getParentFile
 
-        // adding code.jar to the classpath (to provide Code.lift services for reification tests)
+        // adding codelib.jar to the classpath
+        // codelib provides the possibility to override standard reify
+        // this shields the massive amount of reification tests from changes in the API
         execTest(outDir, logFile, PathSettings.srcCodeLib.toString) &&
         diffCheck(compareOutput(dir, logFile))
       })

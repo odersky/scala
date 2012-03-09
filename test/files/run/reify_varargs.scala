@@ -3,7 +3,7 @@ import scala.tools.nsc.Settings
 import reflect.runtime.Mirror.ToolBox
 
 object Test extends App {
-  val code = scala.reflect.Code.lift{
+  val code = scala.reflect.mirror.reify{
     val msg = java.text.MessageFormat.format(
       "On {1} there was {2} on planet {0}.",
       "Hoth", "the fifth of August", "a disturbance in the Force")

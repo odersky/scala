@@ -3,7 +3,7 @@ import scala.tools.nsc.Settings
 import reflect.runtime.Mirror.ToolBox
 
 object Test extends App {
-  val code = scala.reflect.Code.lift{
+  val code = scala.reflect.mirror.reify{
     case class M[A](value: A) {
       def bind[B](k: A => M[B]): M[B] =  k(value)
       def map[B](f: A => B): M[B] =  bind(x => unitM(f(x)))

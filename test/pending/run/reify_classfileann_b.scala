@@ -8,7 +8,7 @@ class ann(bar: String, quux: Array[String] = Array(), baz: ann = null) extends C
 
 object Test extends App {
   // test 1: reify
-  val tree = scala.reflect.Code.lift{
+  val tree = scala.reflect.mirror.reify{
     class C {
       def x: Int = {
         2: @ann(bar="1", quux=Array("2", "3"), baz = new ann(bar = "4"))

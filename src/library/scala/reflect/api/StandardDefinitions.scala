@@ -39,6 +39,7 @@ trait StandardDefinitions { self: Universe =>
     def BooleanClass: Symbol
 
     // fundamental reference classes
+    def ScalaObjectClass : Symbol
     def SymbolClass : Symbol
     def StringClass : Symbol
     def ClassClass  : Symbol
@@ -48,8 +49,15 @@ trait StandardDefinitions { self: Universe =>
     def ProductClass  : Array[Symbol]
     def FunctionClass : Array[Symbol]
 
+    // Option classes
+    def OptionClass: Symbol
+    def NoneModule: Symbol
+    def SomeModule: Symbol
+
     // fundamental modules
     def PredefModule: Symbol
+    def ListModule: Symbol
+    def NilModule: Symbol
 
     /** Given a type T, returns the type corresponding to the VM's
      *  representation: ClassClass's type constructor applied to `arg`.

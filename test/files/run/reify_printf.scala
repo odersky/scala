@@ -1,5 +1,4 @@
 import java.io.{ ByteArrayOutputStream, PrintStream }
-import scala.reflect.Code
 import scala.reflect.mirror._
 import scala.reflect.api._
 import scala.reflect.api.Trees
@@ -10,7 +9,7 @@ import scala.tools.nsc.Settings
 import scala.util.matching.Regex
 
 object Test extends App {
-  val tree = tree_printf(Code.lift("hello %s").tree, Code.lift("world").tree)
+  val tree = tree_printf(reify("hello %s").tree, reify("world").tree)
 
   val reporter = new ConsoleReporter(new Settings)
   val toolbox = new ToolBox(reporter, args mkString " ")
@@ -22,6 +21,7 @@ object Test extends App {
   assert(output.toString() == "hello world", output.toString() +" ==     hello world")
 
   /*
+  // upd. Oh, good old times, our very-very first experiments with macros :)
   macro def printf(format: String, params: Any*) : String = tree_printf(format: Tree, (params: Seq[Tree]): _*)
    */
 

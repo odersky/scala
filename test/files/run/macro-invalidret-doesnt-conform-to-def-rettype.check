@@ -1,0 +1,5 @@
+error: type mismatch;
+ found   : String("42")
+ required: Int
+
+java.lang.Error: reflective compilation has failed
