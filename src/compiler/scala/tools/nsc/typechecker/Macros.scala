@@ -703,15 +703,18 @@ trait Macros { self: Analyzer =>
     val tparams = macroImpl.typeParams
     macroTrace("paramss: ")(paramss)
 
-    // @xeno.by: I'm confused
-    // sometimes nullary invocations come here as Apply(Select, Nil)
-    // sometimes the remain in their original Select form
-    val paramssEndsWithEmpty = (paramss.length != 0 && paramss.last.isEmpty)
-    val argssEndsWithEmpty = (argss.length != 0 && argss.last.isEmpty)
-    if (paramssEndsWithEmpty ^ argssEndsWithEmpty) {
-      if (macroDebug) println("paramssEndsWithEmpty = %s, argssEndsWithEmpty = %s".format(paramssEndsWithEmpty, argssEndsWithEmpty))
-      if (!paramssEndsWithEmpty) paramss = paramss :+ Nil
-      if (!argssEndsWithEmpty) argss = argss :+ Nil
+    // we need to take care of all possible combos of nullary/empty-paramlist macro defs vs nullary/empty-arglist invocations
+    // nullary def + nullary invocation => paramss and argss match, everything is okay
+    // nullary def + empty-arglist invocation => illegal Scala code, impossible, everything is okay
+    // empty-paramlist def + nullary invocation => uh-oh, we need to append a List() to argss
+    // empty-paramlist def + empty-arglist invocation => paramss and argss match, everything is okay
+    // that's almost it, but we need to account for the fact that paramss might have context bounds that mask the empty last paramlist
+    val paramss_without_evidences = transformTypeTagEvidenceParams(paramss, (param, tparam) => None)
+    val isEmptyParamlistDef = paramss_without_evidences.length != 0 && paramss_without_evidences.last.isEmpty
+    val isEmptyArglistInvocation = argss.length != 0 && argss.last.isEmpty
+    if (isEmptyParamlistDef && !isEmptyArglistInvocation) {
+      if (macroDebug) println("isEmptyParamlistDef && !isEmptyArglistInvocation: appending a List() to argss")
+      argss = argss :+ Nil
     }
 
     // if paramss have typetag context bounds, add an arglist to argss if necessary and instantiate the corresponding evidences
