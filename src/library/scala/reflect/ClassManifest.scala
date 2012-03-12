@@ -39,7 +39,7 @@ import java.lang.{ Class => jClass }
  *  be wrong when variance is involved or when a subtype has a different
  *  number of type arguments than a supertype.
  */
-trait ClassManifest[T] extends OptManifest[T] with Equals with Serializable {
+trait ClassManifest[T] extends ClassTag[T] with OptManifest[T] with Equals with Serializable {
   /** A class representing the type `U` to which `T` would be erased. Note
     * that there is no subtyping relationship between `T` and `U`. */
   def erasure: jClass[_]
@@ -223,7 +223,7 @@ object ClassManifest {
     case NoManifest          => Object.asInstanceOf[ClassManifest[Array[T]]]
     case m: ClassManifest[_] => m.asInstanceOf[ClassManifest[T]].arrayManifest
   }
-
+/*
   /** ClassManifest for the abstract type `prefix # name`. `upperBound` is not
     * strictly necessary as it could be obtained by reflection. It was
     * added so that erasure can be calculated without reflection. */
@@ -237,14 +237,14 @@ object ClassManifest {
   /** ClassManifest for the abstract type `prefix # name`. `upperBound` is not
     * strictly necessary as it could be obtained by reflection. It was
     * added so that erasure can be calculated without reflection.
-    * todo: remove after next boostrap
+    * todo: remove after next boostraptrait
     */
   def abstractType[T](prefix: OptManifest[_], name: String, upperbound: ClassManifest[_], args: OptManifest[_]*): ClassManifest[T] =
     new ClassManifest[T] {
       def erasure = upperbound.erasure
       override val typeArguments = args.toList
       override def toString = prefix.toString+"#"+name+argString
-    }
+    }*/
 }
 
 /** Manifest for the class type `clazz[args]`, where `clazz` is
@@ -252,7 +252,7 @@ object ClassManifest {
 private class ClassTypeManifest[T <: AnyRef](
   prefix: Option[OptManifest[_]],
   val erasure: jClass[_],
-  override val typeArguments: List[OptManifest[_]]) extends ClassManifest[T]
+  override val typeArguments: List[OptManifest[_]]) extends ClassTag[T](erasure) with ClassManifest[T]
 {
   override def toString =
     (if (prefix.isEmpty) "" else prefix.get.toString+"#") +

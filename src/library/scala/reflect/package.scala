@@ -16,6 +16,9 @@ package object reflect {
   type Symbol = mirror.Symbol
   type Type = mirror.Type
   type Tree = mirror.Tree
+  type ClassTag[T] = mirror.ClassTag[T]
+  type TypeTag[T] = mirror.TypeTag[T]
+  type GroundTypeTag[T] = mirror.GroundTypeTag[T]
 
   @deprecated("Use `@scala.beans.BeanDescription` instead", "2.10.0")
   type BeanDescription = scala.beans.BeanDescription
