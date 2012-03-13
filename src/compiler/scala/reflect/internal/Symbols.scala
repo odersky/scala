@@ -51,15 +51,6 @@ trait Symbols extends api.Symbols { self: SymbolTable =>
   def newFreeVar(name: TermName, tpe: Type, value: Any, newFlags: Long = 0L): FreeVar =
     new FreeVar(name, value) initFlags newFlags setInfo tpe
 
-  /** Mark a variable as captured; i.e. force boxing in a *Ref type.
-   */
-  def captureVariable(vble: Symbol): Unit = vble setFlag CAPTURED
-
-  /** Mark given identifier as a reference to a captured variable itself
-   *  suppressing dereferencing with the `elem` field.
-   */
-  def referenceCapturedVariable(vble: Symbol): Tree = ReferenceToBoxed(Ident(vble))
-
   /** The original owner of a class. Used by the backend to generate
    *  EnclosingMethod attributes.
    */

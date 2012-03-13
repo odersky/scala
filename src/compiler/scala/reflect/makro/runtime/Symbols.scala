@@ -1,10 +1,14 @@
 package scala.reflect.makro
 package runtime
 
+import scala.reflect.internal.Flags._
+
 trait Symbols {
   self: Context =>
 
-  def captureVariable(vble: Symbol): Unit = mirror.captureVariable(vble)
+  import mirror._
 
-  def referenceCapturedVariable(vble: Symbol): Tree = mirror.referenceCapturedVariable(vble)
+  def captureVariable(vble: Symbol): Unit = vble setFlag CAPTURED
+
+  def referenceCapturedVariable(vble: Symbol): Tree = ReferenceToBoxed(Ident(vble))
 }
