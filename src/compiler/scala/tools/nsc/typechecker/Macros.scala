@@ -834,7 +834,7 @@ trait Macros { self: Analyzer =>
               var expanded = macroMirror.invoke(implObj, implMeth)(args: _*)
               expanded match {
                 case expanded: Expr[_] =>
-                  // copypastes of reify are usually huge, and can be debugged by -Yreify-copypase
+                  // copypastes of reify are usually huge, and can be debugged by -Yreify-copypaste
                   // so I'm turning them off here
                   if (macroCopypaste && implObj != scala.reflect.api.Universe) {
                     if (macroDebug) println("==========ORIGINAL===========")
@@ -843,9 +843,15 @@ trait Macros { self: Analyzer =>
                     if (!macroTyperDebug) println("=============================")
                   }
 
-                  // macro expansion gets typechecked against the macro definition return type
-                  // however, this happens in macroExpand, not here in macroExpand1
-                  Some(expanded.tree)
+                  val freeVars = expanded.tree filter (t => t.symbol != null && t.symbol.isFreeVariable)
+                  if (freeVars.length > 0) {
+                    typer.context.unit.error(expandee.pos, "macro must not return an expr that contains free variables (namely: %s). have you forgot to use eval?".format(freeVars mkString ","))
+                    None
+                  } else {
+                    // macro expansion gets typechecked against the macro definition return type
+                    // however, this happens in macroExpand, not here in macroExpand1
+                    Some(expanded.tree)
+                  }
                 case expanded if expanded.isInstanceOf[Expr[_]] =>
                   typer.context.unit.error(expandee.pos, "macro must return a compiler-specific expr; returned value is Expr, but it doesn't belong to this compiler's universe")
                   None
