@@ -9,3 +9,4 @@ abstract class Context(val mirror: Global) extends scala.reflect.makro.Context
                                            with Reporters
                                            with Symbols
                                            with Typers
+                                           with Utils

@@ -4,7 +4,8 @@ trait Context extends Aliases
               with Reifiers
               with Reporters
               with Symbols
-              with Typers {
+              with Typers
+              with Utils {
 
   /** The mirror that corresponds to the compile-time universe */
   val mirror: scala.reflect.api.Universe

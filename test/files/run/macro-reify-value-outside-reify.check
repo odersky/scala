@@ -1,0 +1,3 @@
+error: exception during macro expansion: Expr.value cannot be used outside reify
+
+java.lang.Error: reflective compilation has failed
