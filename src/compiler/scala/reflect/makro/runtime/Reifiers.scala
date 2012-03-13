@@ -14,18 +14,24 @@ import scala.collection.mutable.ListBuffer
 import scala.tools.nsc.util.FreshNameCreator
 import scala.runtime.ScalaRunTime.{ isAnyVal, isTuple }
 
+/** Given a tree or a type, generate a tree that when executed at runtime produces the original tree or type.
+ *  See more info in the comments to ``reify'' in scala.reflect.api.Universe.
+ *
+ *  @author Martin Odersky
+ *  @version 2.10
+ */
 trait Reifiers {
   self: Context =>
 
   import mirror._
 
-  /** Given a tree, generate a tree that when executed at runtime produces the original tree.
-   *  See more info in the comments to `reify' in scala.macro.api.Reifiers.
-   *
-   *  @author Martin Odersky
-   *  @version 2.10
-   */
-  def reifyTree(tree: Tree): Tree = {
+  val reifyDebug = settings.Yreifydebug.value
+  val reifyCopypaste = settings.Yreifycopypaste.value
+  val reifyTrace = scala.tools.nsc.util.trace when reifyDebug
+  object reifiedNodePrinters extends { val global: mirror.type = mirror } with tools.nsc.ast.NodePrinters with reflect.makro.runtime.ReifyPrinters
+  val reifiedNodeToString = reifiedNodePrinters.reifiedNodeToString
+
+  def reifyTopLevel(any: Any, spliceTypes: Boolean) = {
     class Reifier {
       import definitions._
       import Reifier._
@@ -33,8 +39,6 @@ trait Reifiers {
       final val scalaPrefix = "scala."
       final val localPrefix = "$local"
       final val memoizerName = "$memo"
-
-      val reifyDebug = settings.Yreifydebug.value
 
       private val reifiableSyms = mutable.ArrayBuffer[Symbol]() // the symbols that are reified with the tree
       private val symIndex = mutable.HashMap[Symbol, Int]() // the index of a reifiable symbol in `reifiableSyms`
@@ -74,27 +78,29 @@ trait Reifiers {
        *   - `T` is the type that corresponds to `data`.
        */
       def reifyTopLevel(data: Any): Tree = {
-        var rtree = reify(data)
-
-        val manifestedType = data match {
+        val rtree = data match {
           case tree: Tree =>
+            // @xeno.by: conventional way of doing this?
+            if (tree.tpe == null)
+              CannotReifyPreTyperTree(tree)
+
+            val rtree = reify(data)
+
             val ownerClass = definitions.EmptyPackageClass.newClassWithInfo(newTypeName("<reification-owner>"), List(definitions.ObjectClass.tpe), newScope)
             val owner = ownerClass.newLocalDummy(tree.pos)
             val typer = new analyzer.Typer(analyzer.NoContext.make(EmptyTree, owner, newScope)) {}
-            typer.packedType(tree, owner)
-          case tpe: Type =>
-            tpe
-          case _ =>
-            throw new Error("reifee %s of type %s is not supported".format(data, data.getClass))
-        }
-
-        rtree = data match {
-          case tree: Tree =>
+            val manifestedType = typer.packedType(tree, owner)
             var ctor = TypeApply(Select(Ident(mirrorAlias.name), ExprModule.name), List(TypeTree(manifestedType)))
             Apply(ctor, List(rtree))
+
           case tpe: Type =>
+            val rtree = reify(data)
+
+            // @xeno.by: what do I do here? would be lovely to pack this type as well.
+            val manifestedType = tpe
             var ctor = TypeApply(Select(Ident(mirrorAlias.name), TypeTagModule.name), List(TypeTree(manifestedType)))
             Apply(ctor, List(rtree))
+
           case _ =>
             throw new Error("reifee %s of type %s is not supported".format(data, data.getClass))
         }
@@ -271,12 +277,14 @@ trait Reifiers {
           CannotReifyTypeInvolvingBoundType(tpe)
 
         // @xeno.by: correct way of doing this?
-        val typetagTpe = SelectFromTypeTree(Ident(MacroContextClass), newTypeName("TypeTag"))
-        val implicitInScope = typeCheck(TypeApply(Ident(newTermName("implicitly")), List(AppliedTypeTree(typetagTpe, List(TypeTree(tpe0))))))
+        val typeTagInScope = if (spliceTypes) {
+          val typetagTpe = SelectFromTypeTree(Ident(MacroContextClass), newTypeName("TypeTag"))
+          typeCheck(TypeApply(Ident(newTermName("implicitly")), List(AppliedTypeTree(typetagTpe, List(TypeTree(tpe0))))))
+        } else None
 
-        implicitInScope match {
-          case Some(implicitInScope) =>
-            val Apply(_, List(ref)) = implicitInScope
+        typeTagInScope match {
+          case Some(typeTagInScope) =>
+            val Apply(_, List(ref)) = typeTagInScope
             Select(ref, newTermName("tpe"))
           case None =>
             val tsym = tpe.typeSymbol
@@ -733,7 +741,7 @@ trait Reifiers {
 
         symDefs.toList ++ fillIns.toList
       }
-    } // end of Reifier
+    }
 
     object Reifier {
       def CannotReifyPreTyperTree(tree: Tree) = {
@@ -770,35 +778,39 @@ trait Reifiers {
         val msg = "implementation restriction: cannot reify annotation @%s which involves a symbol declared inside the block being reified".format(ann)
         throw new ReificationError(ann.original.pos, msg)
       }
-    } // end of Reifier
+    }
 
-    // begin reify
     import Reifier._
-    if (tree.tpe != null) {
-      val saved = printTypings
-      try {
-        val reifyDebug = settings.Yreifydebug.value
-        val debugTrace = tools.nsc.util.trace when reifyDebug
-        debugTrace("transforming = ")(if (settings.Xshowtrees.value) "\n" + nodePrinters.nodeToString(tree).trim else tree.toString)
-        debugTrace("transformed = ") {
-          val reifier = new Reifier()
-          val untyped = reifier.reifyTopLevel(tree)
+    new Reifier().reifyTopLevel(any)
+  }
 
-          val reifyCopypaste = settings.Yreifycopypaste.value
-          if (reifyCopypaste) {
-            object reifiedNodePrinters extends { val global: mirror.type = mirror } with tools.nsc.ast.NodePrinters with reflect.makro.runtime.ReifyPrinters
-            if (reifyDebug) println("=======================")
-            println(reifiedNodePrinters.reifiedNodeToString(untyped))
-            if (reifyDebug) println("=======================")
-          }
+  def reifyTree(tree: Tree): Tree = {
+    reifyTrace("reifying tree = ")(if (settings.Xshowtrees.value) "\n" + nodePrinters.nodeToString(tree).trim else tree.toString)
+    reifyTrace("reified tree = ") {
+      val untyped = reifyTopLevel(tree, true)
 
-          untyped
-        }
-      } finally {
-        printTypings = saved
+      if (reifyCopypaste) {
+        if (reifyDebug) println("=======================")
+        println(reifiedNodeToString(untyped))
+        if (reifyDebug) println("=======================")
       }
-    } else {
-      CannotReifyPreTyperTree(tree)
+
+      untyped
+    }
+  }
+
+  def reifyType(tpe: Type): Tree = {
+    reifyTrace("reifying type = ")(tpe.toString)
+    reifyTrace("reified type = ") {
+      val untyped = reifyTopLevel(tpe, true)
+
+      if (reifyCopypaste) {
+        if (reifyDebug) println("=======================")
+        println(reifiedNodeToString(untyped))
+        if (reifyDebug) println("=======================")
+      }
+
+      untyped
     }
   }
 

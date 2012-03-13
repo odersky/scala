@@ -30,6 +30,21 @@ abstract class Universe extends Symbols
    *      $mr.Expr[Int]($mr.Apply($mr.Select($mr.Ident($mr.newFreeVar("x", <Int>, x), "+"), List($mr.Literal($mr.Constant(1))))))
    *    ]>
    *
+   *  Reification performs expression splicing (when processing Expr.eval and Expr.value)
+   *  and type splicing (for every type T that has a TypeTag[T] implicit in scope):
+   *
+   *    val two = mirror.reify(2)                       // Literal(Constant(2))
+   *    val four = mirror.reify(two.eval + two.eval)    // Apply(Select(two.tree, newTermName("$plus")), List(two.tree))
+   *
+   *    def macroImpl[T](c: Context) = {
+   *      ...
+   *      // T here is just a type parameter, so the tree produced by reify won't be of much use in a macro expansion
+   *      // however, if T were annotated with c.TypeTag (which would declare an implicit parameter for macroImpl)
+   *      // then reification would subtitute T with the TypeTree that was used in a TypeApply of this particular macro invocation
+   *      val factory = c.reify{ new Queryable[T] }
+   *      ...
+   *    }
+   *
    *  The transformation looks mostly straightforward, but it has its tricky parts:
    *    * Reifier retains symbols and types defined outside the reified tree, however
    *      locally defined entities get erased and replaced with their original trees

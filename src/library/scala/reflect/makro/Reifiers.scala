@@ -5,6 +5,7 @@ trait Reifiers {
 
   /** Given a tree, generate a tree that when compiled and executed produces the original tree.
    *  The produced tree will be bound to the standard reflective mirror, ``scala.reflect.mirror''.
+   *  For more information and examples see the documentation for ``Universe.reify''.
    *
    *  This function is deeply connected to ``Universe.reify'', a macro that reifies arbitrary expressions into runtime trees.
    *  They do very similar things (``Universe.reify'' calls ``Context.reifyTree'' to implement itself), but they operate on different metalevels (see below).
@@ -35,6 +36,12 @@ trait Reifiers {
    *  into the form that can be inspected (via pattern matching) or compiled/run (by a reflective ToolBox) during the runtime.
    */
   def reifyTree(tree: Tree): Tree
+
+  /** Given a type, generate a tree that when compiled and executed produces the original type.
+   *  The produced tree will be bound to the standard reflective mirror, ``scala.reflect.mirror''.
+   *  For more information and examples see the documentation for ``Context.reifyTree'' and ``Universe.reify''.
+   */
+  def reifyType(tpe: Type): Tree
 
   /** Undoes reification of a tree.
    *
