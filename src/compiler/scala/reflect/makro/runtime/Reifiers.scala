@@ -724,7 +724,8 @@ trait Reifiers {
       private def typePath(fullname: String): Tree = path(fullname, newTypeName)
 
       private def mirrorAlias =
-        ValDef(NoMods, nme.MIRROR_SHORT, TypeTree(ReflectApiUniverse.tpe), termPath(fullnme.MirrorPackage))
+//        ValDef(NoMods, nme.MIRROR_SHORT, TypeTree(ReflectApiUniverse.tpe), termPath(fullnme.MirrorPackage))
+        ValDef(NoMods, nme.MIRROR_SHORT, SingletonTypeTree(termPath(fullnme.MirrorPackage)), termPath(fullnme.MirrorPackage))
 
       /**
        * Generate code that generates a symbol table of all symbols registered in `reifiableSyms`
