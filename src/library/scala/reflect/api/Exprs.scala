@@ -16,8 +16,8 @@ trait Exprs { self: Universe =>
     // so we need to:
     //    1.move Manifest to reflect.api.Universe (leave alias in reflect)
     //    2.change implicit search so that Manifests of arbitary universes can be generated.
-    def eval: T = ??? // todo: implement this
-    lazy val value: T = eval
+    def eval: T = throw new Error("Expr.eval cannot be used outside reify")
+    lazy val value: T = throw new Error("Expr.value cannot be used outside reify")
     override def toString = "Expr["+tpe+"]("+tree+")"
   }
 

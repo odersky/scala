@@ -957,6 +957,7 @@ trait Typers extends Modes with Adaptations with PatMatVirtualiser {
 
                 if (macroCopypaste && macroTyperDebug) {
                   if (macroDebug) println("========TYPECHECKED2=========")
+                  println(typechecked)
                   println(showRaw(typechecked))
                   if (macroDebug) println("=============================")
                 }

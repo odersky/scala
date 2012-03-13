@@ -270,6 +270,7 @@ trait Macros { self: Analyzer =>
               val typechecked = typer.typed1(expanded, EXPRmode, WildcardType)
               if (macroCopypaste && macroTyperDebug) {
                 if (macroDebug) println("========TYPECHECKED1=========")
+                println(typechecked)
                 println(showRaw(typechecked))
                 if (macroDebug) println("=============================")
               }
@@ -677,8 +678,6 @@ trait Macros { self: Analyzer =>
     }
     var argss: List[List[Any]] = macroArgs(expandee)
     val currentTyper = typer
-    // [xeno.by to Martin] moved context creation here, because we no longer need it in global
-    // previously one needed context api in Reifiers, but now they are a part of context anyway
     object simpleMacroContext extends scala.reflect.makro.runtime.Context(global) {
       val prefix = Expr(prefixArg map (_.asInstanceOf[this.mirror.Tree]) getOrElse this.mirror.EmptyTree)
       val callsiteTyper = currentTyper.asInstanceOf[this.mirror.analyzer.Typer]
@@ -804,6 +803,7 @@ trait Macros { self: Analyzer =>
       val typechecked = typer.context.withImplicitsEnabled(typer.typed(expanded, EXPRmode, expectedTpe))
       if (macroCopypaste && macroTyperDebug) {
         if (macroDebug) println("========TYPECHECKED1=========")
+        println(typechecked)
         println(showRaw(typechecked))
       }
 
@@ -834,17 +834,24 @@ trait Macros { self: Analyzer =>
               var expanded = macroMirror.invoke(implObj, implMeth)(args: _*)
               expanded match {
                 case expanded: Expr[_] =>
-                  // copypastes of reify are usually huge, and can be debugged by -Yreify-copypase
+                  // copypastes of reify are usually huge, and can be debugged by -Yreify-copypaste
                   // so I'm turning them off here
                   if (macroCopypaste && implObj != scala.reflect.api.Universe) {
                     if (macroDebug) println("==========ORIGINAL===========")
+                    println(expanded.tree)
                     println(showRaw(expanded.tree))
                     if (!macroTyperDebug) println("=============================")
                   }
 
-                  // macro expansion gets typechecked against the macro definition return type
-                  // however, this happens in macroExpand, not here in macroExpand1
-                  Some(expanded.tree)
+                  val freeVars = expanded.tree filter (t => t.symbol != null && t.symbol.isFreeVariable)
+                  if (freeVars.length > 0) {
+                    typer.context.unit.error(expandee.pos, "macro must not return an expr that contains free variables (namely: %s). have you forgot to use eval?".format(freeVars mkString ","))
+                    None
+                  } else {
+                    // macro expansion gets typechecked against the macro definition return type
+                    // however, this happens in macroExpand, not here in macroExpand1
+                    Some(expanded.tree)
+                  }
                 case expanded if expanded.isInstanceOf[Expr[_]] =>
                   typer.context.unit.error(expandee.pos, "macro must return a compiler-specific expr; returned value is Expr, but it doesn't belong to this compiler's universe")
                   None

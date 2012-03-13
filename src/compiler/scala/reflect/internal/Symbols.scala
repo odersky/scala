@@ -51,15 +51,6 @@ trait Symbols extends api.Symbols { self: SymbolTable =>
   def newFreeVar(name: TermName, tpe: Type, value: Any, newFlags: Long = 0L): FreeVar =
     new FreeVar(name, value) initFlags newFlags setInfo tpe
 
-  /** Mark a variable as captured; i.e. force boxing in a *Ref type.
-   */
-  def captureVariable(vble: Symbol): Unit = vble setFlag CAPTURED
-
-  /** Mark given identifier as a reference to a captured variable itself
-   *  suppressing dereferencing with the `elem` field.
-   */
-  def referenceCapturedVariable(vble: Symbol): Tree = ReferenceToBoxed(Ident(vble))
-
   /** The original owner of a class. Used by the backend to generate
    *  EnclosingMethod attributes.
    */
@@ -476,6 +467,8 @@ trait Symbols extends api.Symbols { self: SymbolTable =>
     final def isValue = isTerm && !(isModule && hasFlag(PACKAGE | JAVA))
 
     final def isVariable  = isTerm && isMutable && !isMethod
+
+    def isFreeVariable = false
 
     // interesting only for lambda lift. Captured variables are accessed from inner lambdas.
     final def isCapturedVariable  = isVariable && hasFlag(CAPTURED)
@@ -2632,6 +2625,7 @@ trait Symbols extends api.Symbols { self: SymbolTable =>
   }
 
   class FreeVar(name0: TermName, val value: Any) extends TermSymbol(NoSymbol, NoPosition, name0) {
+    override def isFreeVariable = true
     override def hashCode = if (value == null) 0 else value.hashCode
     override def equals(other: Any): Boolean = other match {
       case that: FreeVar => this.value.asInstanceOf[AnyRef] eq that.value.asInstanceOf[AnyRef]
