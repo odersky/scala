@@ -31,7 +31,7 @@ trait Reifiers {
   object reifiedNodePrinters extends { val global: mirror.type = mirror } with tools.nsc.ast.NodePrinters with reflect.makro.runtime.ReifyPrinters
   val reifiedNodeToString = reifiedNodePrinters.reifiedNodeToString
 
-  def reifyTopLevel(any: Any, spliceTypes: Boolean) = {
+  def reifyTopLevel(any: Any) = {
     class Reifier {
       import definitions._
       import Reifier._
@@ -277,10 +277,8 @@ trait Reifiers {
           CannotReifyTypeInvolvingBoundType(tpe)
 
         // @xeno.by: correct way of doing this?
-        val typeTagInScope = if (spliceTypes) {
-          val typetagTpe = SelectFromTypeTree(Ident(MacroContextClass), newTypeName("TypeTag"))
-          typeCheck(TypeApply(Ident(newTermName("implicitly")), List(AppliedTypeTree(typetagTpe, List(TypeTree(tpe0))))))
-        } else None
+        val typetagTpe = SelectFromTypeTree(Ident(MacroContextClass), newTypeName("TypeTag"))
+        val typeTagInScope = typeCheck(TypeApply(Ident(newTermName("implicitly")), List(AppliedTypeTree(typetagTpe, List(TypeTree(tpe0))))))
 
         typeTagInScope match {
           case Some(typeTagInScope) =>
@@ -792,7 +790,7 @@ trait Reifiers {
   def reifyTree(tree: Tree): Tree = {
     reifyTrace("reifying tree = ")(if (settings.Xshowtrees.value) "\n" + nodePrinters.nodeToString(tree).trim else tree.toString)
     reifyTrace("reified tree = ") {
-      val untyped = reifyTopLevel(tree, true)
+      val untyped = reifyTopLevel(tree)
 
       if (reifyCopypaste) {
         if (reifyDebug) println("=======================")
@@ -807,7 +805,7 @@ trait Reifiers {
   def reifyType(tpe: Type): Tree = {
     reifyTrace("reifying type = ")(tpe.toString)
     reifyTrace("reified type = ") {
-      val untyped = reifyTopLevel(tpe, true)
+      val untyped = reifyTopLevel(tpe)
 
       if (reifyCopypaste) {
         if (reifyDebug) println("=======================")

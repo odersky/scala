@@ -10,6 +10,7 @@ trait Exprs { self: Universe =>
 
   /** An expression tree tagged with its type */
   case class Expr[+T](tree: Tree) {
+    // todo. we should print out the typetag of T here, because tree might be untyped (e.g. after reification)
     def tpe: Type = tree.tpe
     // assert(tree.tpe <:< T.typeTag.tpe)
     // would like to check the above assertion, but Manifests need to be part of the universe first.
