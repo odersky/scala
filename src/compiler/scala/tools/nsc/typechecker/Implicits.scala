@@ -265,6 +265,13 @@ trait Implicits {
         )
       )
 //    assert(tree.isEmpty || tree.pos.isDefined, tree)
+      
+      
+    def failure(what: Any, reason: String): SearchResult = {
+      if (settings.XlogImplicits.value)
+        inform(what+" is not a valid implicit value for "+pt+" because:\n"+reason)
+      SearchFailure
+    }  
 
     import infer._
     /** Is implicit info `info1` better than implicit info `info2`?
@@ -524,11 +531,7 @@ trait Implicits {
         typeDebug.ptTree(itree), wildPt, info.name, info.tpe)
       )
 
-      def fail(reason: String): SearchResult = {
-        if (settings.XlogImplicits.value)
-          inform(itree+" is not a valid implicit value for "+pt+" because:\n"+reason)
-        SearchFailure
-      }
+      def fail(reason: String): SearchResult = failure(itree, reason)
       try {
         val itree1 =
           if (isView) {
@@ -1092,16 +1095,21 @@ trait Implicits {
       assert(pre.isStable)
       val qual = gen.mkAttributedRef(pre, tagClass.companionModule)
       val appmeth = qual.symbol.info member nme.apply
-      val arg =
-        if (tagClass == ClassTagClass) gen.mkClassOf(tp)
-        else macroContext(EmptyTree, newTyper(context))
-          .reifyTypeNoSplice(tp, mustBeGround = tagClass == GroundTypeTagClass)
-      if (arg == EmptyTree)
-        SearchFailure
-      else
+      def success(arg: Tree) = 
         new SearchResult(
           typedPos(tree.pos.focus)(gen.mkMethodCall(qual, appmeth, List(tp), List(arg))),
           EmptyTreeTypeSubstituter)
+      if (tagClass == ClassTagClass) success(gen.mkClassOf(tp))
+      else {
+        val ctx = macroContext(EmptyTree, newTyper(context))
+        try {
+          success(ctx.reifyTypeNoSplice(tp, mustBeGround = tagClass == GroundTypeTagClass))
+        } catch {
+          case ex: ctx.ReificationError =>
+            ex.printStackTrace() // debug
+            failure(tp, "reification error: " + ex.getMessage)
+        }
+      }
     }
 
     /** Creates a tree that calls the relevant factory method in object

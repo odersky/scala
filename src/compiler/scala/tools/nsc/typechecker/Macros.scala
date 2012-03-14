@@ -679,6 +679,7 @@ trait Macros { self: Analyzer =>
     macroTrace("argss: ")(argss)
 
     val macroDef = expandee.symbol
+    
     val numArgLists = exprArgs.length
     val numParamLists = macroDef.paramss.length
     if (numParamLists != numArgLists) {
