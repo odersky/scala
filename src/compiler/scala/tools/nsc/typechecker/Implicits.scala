@@ -1103,7 +1103,7 @@ trait Implicits {
       else {
         val ctx = macroContext(EmptyTree, newTyper(context))
         try {
-          success(ctx.reifyTypeNoSplice(tp, mustBeGround = tagClass == GroundTypeTagClass))
+          success(ctx.reifyTopLevel(tp, searchImplicitTypeTagAtTop = false, mustBeGround = tagClass == GroundTypeTagClass))
         } catch {
           case ex: ctx.ReificationError =>
             ex.printStackTrace() // debug

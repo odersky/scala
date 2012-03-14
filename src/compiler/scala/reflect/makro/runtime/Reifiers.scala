@@ -31,7 +31,7 @@ trait Reifiers {
   object reifiedNodePrinters extends { val global: mirror.type = mirror } with tools.nsc.ast.NodePrinters with reflect.makro.runtime.ReifyPrinters
   val reifiedNodeToString = reifiedNodePrinters.reifiedNodeToString
 
-  def reifyTopLevel(any: Any, spliceTypes: Boolean = true, mustBeGround: Boolean = false) = {
+  def reifyTopLevel(any: Any, searchImplicitTypeTagAtTop: Boolean = true, mustBeGround: Boolean = false) = {
     class Reifier {
       import definitions._
       import Reifier._
@@ -39,6 +39,8 @@ trait Reifiers {
       final val scalaPrefix = "scala."
       final val localPrefix = "$local"
       final val memoizerName = "$memo"
+        
+      private var spliceTypes = searchImplicitTypeTagAtTop
 
       private val reifiableSyms = mutable.ArrayBuffer[Symbol]() // the symbols that are reified with the tree
       private val symIndex = mutable.HashMap[Symbol, Int]() // the index of a reifiable symbol in `reifiableSyms`
@@ -277,18 +279,22 @@ trait Reifiers {
           CannotReifyTypeInvolvingBoundType(tpe)
 
         if (tpe.typeSymbol.isAbstractType) {
-          // @xeno.by: correct way of doing this?
-          val typetagTpe = SelectFromTypeTree(Ident(MacroContextClass), newTypeName("TypeTag"))
-          val typeTagInScope = typeCheck(TypeApply(Ident(newTermName("implicitly")), List(AppliedTypeTree(typetagTpe, List(TypeTree(tpe0))))))
-          typeTagInScope match {
-            case Some(typeTagInScope) =>
-              val Apply(_, List(ref)) = typeTagInScope
-              return Select(ref, newTermName("tpe"))
-            case None =>
-              if (mustBeGround)
-                CannotReifyUnresolvedTypeParametersWhenMustBeGroundIsSet(tpe)
+          if (spliceTypes) {
+            // @xeno.by: correct way of doing this?
+            val typetagTpe = SelectFromTypeTree(Ident(MacroContextClass), newTypeName("TypeTag"))
+            val typeTagInScope = typeCheck(TypeApply(Ident(newTermName("implicitly")), List(AppliedTypeTree(typetagTpe, List(TypeTree(tpe0))))))
+            typeTagInScope match {
+              case Some(typeTagInScope) =>
+                val Apply(_, List(ref)) = typeTagInScope
+                return Select(ref, newTermName("tpe"))
+              case None =>
+            }
           }
+
+          if (mustBeGround)
+            CannotReifyUnresolvedTypeParametersWhenMustBeGroundIsSet(tpe)
         }
+        spliceTypes = true
 
         val tsym = tpe.typeSymbol
         if (tsym.isClass && tpe == tsym.typeConstructor && tsym.isStatic)
