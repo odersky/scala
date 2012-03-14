@@ -280,14 +280,16 @@ trait Reifiers {
 
         if (tpe.typeSymbol.isAbstractType) {
           if (spliceTypes) {
-            // @xeno.by: correct way of doing this?
-            val typetagTpe = SelectFromTypeTree(Ident(MacroContextClass), newTypeName("TypeTag"))
-            val typeTagInScope = typeCheck(TypeApply(Ident(newTermName("implicitly")), List(AppliedTypeTree(typetagTpe, List(TypeTree(tpe0))))))
-            typeTagInScope match {
-              case Some(typeTagInScope) =>
-                val Apply(_, List(ref)) = typeTagInScope
-                return Select(ref, newTermName("tpe"))
-              case None =>
+            val tagClass = if (mustBeGround) GroundTypeTagClass else TypeTagClass
+            mirror.analyzer.inferImplicit(
+                EmptyTree, appliedType(tagClass.typeConstructor, List(tpe)), 
+                reportAmbiguous = true,
+                isView = false,
+                context = callsiteTyper.context
+                ) match {
+              case success: mirror.analyzer.SearchResult =>
+                return Select(success.tree, newTermName("tpe"))
+              case failure =>
             }
           }
 
