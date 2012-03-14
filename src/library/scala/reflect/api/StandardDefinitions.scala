@@ -15,7 +15,11 @@ trait StandardDefinitions { self: Universe =>
     def RootPackage: Symbol
     def RootClass: Symbol
     def EmptyPackage: Symbol
+    def EmptyPackageClass: Symbol
     def ScalaPackage: Symbol
+    def ScalaPackageClass: Symbol
+    def JavaLangPackage: Symbol
+    def JavaLangPackageClass: Symbol
 
     // top types
     def AnyClass   : Symbol

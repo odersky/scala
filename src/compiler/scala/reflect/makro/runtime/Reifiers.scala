@@ -295,7 +295,11 @@ trait Reifiers {
                 reifyMirrorObject(t)
               case t @ NoPrefix =>
                 reifyMirrorObject(t)
-              case tpe @ ThisType(clazz) if clazz.isModuleClass && clazz.isStatic =>
+              case t @ ThisType(root) if root == RootClass =>
+                mirrorSelect("definitions.RootClass.thisPrefix")
+              case t @ ThisType(empty) if empty == EmptyPackageClass =>
+                mirrorSelect("definitions.EmptyPackageClass.thisPrefix")
+              case t @ ThisType(clazz) if clazz.isModuleClass && clazz.isStatic =>
                 mirrorCall(nme.thisModuleType, reify(clazz.fullName))
               case t @ RefinedType(parents, decls) =>
                 registerReifiableSymbol(tpe.typeSymbol)
