@@ -31,7 +31,7 @@ trait Reifiers {
   object reifiedNodePrinters extends { val global: mirror.type = mirror } with tools.nsc.ast.NodePrinters with reflect.makro.runtime.ReifyPrinters
   val reifiedNodeToString = reifiedNodePrinters.reifiedNodeToString
 
-  def reifyTopLevel(any: Any, searchImplicitTypeTagAtTop: Boolean = true, mustBeGround: Boolean = false) = {
+  def reifyTopLevel(any: Any, forImplicit: Boolean = false, mustBeGround: Boolean = false) = {
     class Reifier {
       import definitions._
       import Reifier._
@@ -40,7 +40,7 @@ trait Reifiers {
       final val localPrefix = "$local"
       final val memoizerName = "$memo"
         
-      private var spliceTypes = searchImplicitTypeTagAtTop
+      private var spliceTypes = !forImplicit
 
       private val reifiableSyms = mutable.ArrayBuffer[Symbol]() // the symbols that are reified with the tree
       private val symIndex = mutable.HashMap[Symbol, Int]() // the index of a reifiable symbol in `reifiableSyms`
@@ -97,12 +97,14 @@ trait Reifiers {
 
           case tpe: Type =>
             val rtree = reify(data)
-
-            // @xeno.by: what do I do here? would be lovely to pack this type as well.
-            val manifestedType = tpe
-            var ctor = TypeApply(Select(Ident(mirrorAlias.name), TypeTagModule.name), List(TypeTree(manifestedType)))
-            Apply(ctor, List(rtree))
-
+            
+            if (forImplicit) rtree
+            else {
+              // @xeno.by: what do I do here? would be lovely to pack this type as well.
+              val manifestedType = tpe
+              var ctor = TypeApply(Select(Ident(mirrorAlias.name), TypeTagModule.name), List(TypeTree(manifestedType)))
+              Apply(ctor, List(rtree))
+            }
           case _ =>
             throw new Error("reifee %s of type %s is not supported".format(data, data.getClass))
         }

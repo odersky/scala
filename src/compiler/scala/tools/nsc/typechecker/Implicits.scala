@@ -72,8 +72,10 @@ trait Implicits {
       printTyping("typing implicit: %s %s".format(tree, context.undetparamsString))
     val implicitSearchContext = context.makeImplicit(reportAmbiguous)
     val result = new ImplicitSearch(tree, pt, isView, implicitSearchContext).bestImplicit
-    if (saveAmbiguousDivergent && implicitSearchContext.hasErrors)
+    if (saveAmbiguousDivergent && implicitSearchContext.hasErrors) {
       context.updateBuffer(implicitSearchContext.errBuffer.filter(err => err.kind == ErrorKinds.Ambiguous || err.kind == ErrorKinds.Divergent))
+      if (settings.debug.value) println("update buffer: "+implicitSearchContext.errBuffer)
+    }
     printInference("[infer implicit] inferred " + result)
     context.undetparams = context.undetparams filterNot result.subst.from.contains
 
@@ -1092,18 +1094,22 @@ trait Implicits {
     // Problem: interaction of implicit search with undetermined type parameters not handled here.
     // Need to push into macro context?
     def tagOfType(pre: Type, tp: Type, tagClass: Symbol): SearchResult = {
+      println("tot "+tp)
       assert(pre.isStable)
       val qual = gen.mkAttributedRef(pre, tagClass.companionModule)
       val appmeth = qual.symbol.info member nme.apply
-      def success(arg: Tree) = 
+      def success(arg: Tree) = {
+        println("tot3 "+arg+" "+gen.mkMethodCall(qual, appmeth, List(tp), List(arg)))
         new SearchResult(
           typedPos(tree.pos.focus)(gen.mkMethodCall(qual, appmeth, List(tp), List(arg))),
           EmptyTreeTypeSubstituter)
+      }
       if (tagClass == ClassTagClass) success(gen.mkClassOf(tp))
       else {
+        println("tot2 "+tp)
         val ctx = macroContext(EmptyTree, newTyper(context))
         try {
-          success(ctx.reifyTopLevel(tp, searchImplicitTypeTagAtTop = false, mustBeGround = tagClass == GroundTypeTagClass))
+          success(ctx.reifyTopLevel(tp, forImplicit = true, mustBeGround = tagClass == GroundTypeTagClass))
         } catch {
           case ex: ctx.ReificationError =>
             ex.printStackTrace() // debug
