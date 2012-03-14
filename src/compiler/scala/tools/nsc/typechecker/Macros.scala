@@ -647,8 +647,7 @@ trait Macros { self: Analyzer =>
 
   def macroContext(prefixTree: Tree, typer: Typer)
     : scala.reflect.makro.runtime.Context { val mirror: global.type }
-    = new scala.reflect.makro.runtime.Context {
-    val mirror: global.type = global
+    = new { val mirror: global.type = global} with scala.reflect.makro.runtime.Context {
     val prefix = Expr(prefixTree)
     val callsiteTyper: mirror.analyzer.Typer = typer.asInstanceOf[global.analyzer.Typer]
   }
