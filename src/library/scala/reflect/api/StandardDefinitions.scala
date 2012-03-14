@@ -51,13 +51,41 @@ trait StandardDefinitions { self: Universe =>
 
     // Option classes
     def OptionClass: Symbol
+    def SomeClass: Symbol
     def NoneModule: Symbol
     def SomeModule: Symbol
 
-    // fundamental modules
+    // collections classes
+    def ConsClass: Symbol
+    def IterableClass: Symbol
+    def IteratorClass: Symbol
+    def ListClass: Symbol
+    def SeqClass: Symbol
+    def StringBuilderClass: Symbol
+    def TraversableClass: Symbol
+
+    // collections modules
     def PredefModule: Symbol
     def ListModule: Symbol
+    def List_apply: Symbol
     def NilModule: Symbol
+    def SeqModule: Symbol
+    def IteratorModule: Symbol
+    def Iterator_apply: Symbol
+
+    // arrays and their members
+    def ArrayModule: Symbol
+    def ArrayModule_overloadedApply: Symbol
+    def ArrayClass: Symbol
+    def Array_apply: Symbol
+    def Array_update: Symbol
+    def Array_length: Symbol
+    def Array_clone: Symbol
+
+    // special parameter types
+    def ByNameParamClass: Symbol
+    def JavaRepeatedParamClass: Symbol
+    def RepeatedParamClass: Symbol
 
     /** Given a type T, returns the type corresponding to the VM's
      *  representation: ClassClass's type constructor applied to `arg`.

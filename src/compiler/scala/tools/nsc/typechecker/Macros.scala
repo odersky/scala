@@ -513,6 +513,9 @@ trait Macros { self: Analyzer =>
   /** Specialized version of scala.reflect.mirror that is used to resolve and run macro implementations.
    */
   lazy val macroMirror = new scala.reflect.runtime.Mirror {
+    if (global.forMSIL)
+      throw new UnsupportedOperationException("Scala reflection not available on this platform")
+
     lazy val libraryClassLoader = {
       // todo. this is more or less okay, but not completely correct
       // see https://issues.scala-lang.org/browse/SI-5433 for more info

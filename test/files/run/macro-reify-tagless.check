@@ -1,0 +1,8 @@
+error: type mismatch;
+ found   : String("hello world")
+ required: T
+error: type mismatch;
+ found   : List[T]
+ required: List[String]
+
+java.lang.Error: reflective compilation has failed

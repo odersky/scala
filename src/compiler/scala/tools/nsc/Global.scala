@@ -33,6 +33,7 @@ import backend.opt.{ Inliners, InlineExceptionHandlers, ClosureElimination, Dead
 import backend.icode.analysis._
 
 class Global(var currentSettings: Settings, var reporter: Reporter) extends SymbolTable
+                                                                      with ClassLoaders
                                                                       with CompilationUnits
                                                                       with Plugins
                                                                       with PhaseAssembly
