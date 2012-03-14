@@ -14,6 +14,7 @@ abstract class Universe extends Symbols
                            with TreePrinters
                            with StandardDefinitions
                            with StandardNames
+                           with ClassLoaders
                            with TreeBuildUtil {
 
   /** Given an expression, generate a tree that when compiled and executed produces the original tree.

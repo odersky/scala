@@ -1,4 +1,5 @@
-package scala.reflect.api
+package scala.reflect
+package api
 
 trait TreeBuildUtil { self: Universe =>
 

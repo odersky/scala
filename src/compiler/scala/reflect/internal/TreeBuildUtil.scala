@@ -3,12 +3,10 @@ package internal
 
 trait TreeBuildUtil extends api.TreeBuildUtil { self: SymbolTable =>
 
-  /** A comment to the effect of why initialize was added to all these
-   *  would be appreciated.  (We may as well start somewhere.)
-   */
-  def staticClass(fullname: String)    = definitions.getRequiredClass(fullname).initialize
-  def staticModule(fullname: String)   = definitions.getRequiredModule(fullname).initialize
-  def thisModuleType(fullname: String) = staticModule(fullname).moduleClass.initialize.thisType
+  // ``staticClass'' and ``staticModule'' rely on ClassLoaders
+  // which are implementation-specific for different Universes
+
+  def thisModuleType(fullname: String) = staticModule(fullname).moduleClass.thisType
 
  /** Selects type symbol with given name from the defined members of prefix type
    */

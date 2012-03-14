@@ -5,7 +5,7 @@ import internal.Flags
 import java.lang.{Class => jClass, Package => jPackage}
 import collection.mutable
 
-trait Loaders { self: SymbolTable =>
+trait SymbolLoaders { self: SymbolTable =>
 
   /** The lazy type for root.
    */
@@ -121,6 +121,11 @@ trait Loaders { self: SymbolTable =>
         }
       }
     }
+  }
+
+  /** Assert that packages have package scopes */
+  override def validateClassInfo(tp: ClassInfoType) {
+    assert(!tp.typeSymbol.isPackageClass || tp.decls.isInstanceOf[PackageScope])
   }
 
   override def newPackageScope(pkgClass: Symbol) = new PackageScope(pkgClass)
