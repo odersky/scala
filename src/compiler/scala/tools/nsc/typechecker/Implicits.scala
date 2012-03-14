@@ -101,7 +101,7 @@ trait Implicits {
   }
 
   private val ManifestSymbols = Set(PartialManifestClass, FullManifestClass, OptManifestClass)
-  private val TagSymbols = Set(ClassTagClass, TypeTagClass, GroundTypeTagClass)
+  private lazy val TagSymbols = Set(ClassTagClass, TypeTagClass, GroundTypeTagClass)
 
   /* Map a polytype to one in which all type parameters and argument-dependent types are replaced by wildcards.
    * Consider `implicit def b(implicit x: A): x.T = error("")`. We need to approximate DebruijnIndex types
