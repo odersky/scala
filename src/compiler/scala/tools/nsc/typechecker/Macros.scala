@@ -4,6 +4,7 @@ package typechecker
 import symtab.Flags._
 import scala.tools.nsc.util._
 import scala.reflect.ReflectionUtils
+import scala.collection.mutable.ListBuffer
 
 /**
  *  Code to deal with macros, namely with:
@@ -644,6 +645,14 @@ trait Macros { self: Analyzer =>
     }
   }
 
+  def macroContext(prefixTree: Tree, typer: Typer)
+    : scala.reflect.makro.runtime.Context { val mirror: global.type }
+    = new scala.reflect.makro.runtime.Context {
+    val mirror: global.type = global
+    val prefix = Expr(prefixTree)
+    val callsiteTyper: mirror.analyzer.Typer = typer.asInstanceOf[global.analyzer.Typer]
+  }
+
   /** Calculate the arguments to pass to a macro implementation when expanding the provided tree.
    *
    *  This includes inferring the exact type and instance of the macro context to pass, and also
@@ -652,40 +661,26 @@ trait Macros { self: Analyzer =>
    *  @return list of runtime objects to pass to the implementation obtained by ``macroRuntime''
    */
   def macroArgs(expandee: Tree, typer: Typer): Option[List[Any]] = {
-    var argssHavePrefix = false
-    var prefixArg: Option[Tree] = None
-    var argssHaveTargs = false
+    var prefixTree: Tree = EmptyTree
     var typeArgs = List[Tree]()
-    var numArgLists = 0
-    def macroArg(tree: Tree): Any =
-      if (tree.isType) TypeTag(tree.tpe) else Expr(tree)
-    def macroArgs(tree: Tree): (List[List[Any]]) = tree match {
+    val exprArgs = new ListBuffer[List[Expr[_]]]
+    def collectMacroArgs(tree: Tree): Unit = tree match {
       case Apply(fn, args) =>
-        numArgLists += 1
-        macroArgs(fn) :+ (args map macroArg)
+        exprArgs += (args map (Expr(_)))
+        collectMacroArgs(fn)
       case TypeApply(fn, args) =>
-        assert(!argssHaveTargs)
-        argssHaveTargs = true
         typeArgs = args
-        macroArgs(fn)
+        collectMacroArgs(fn)
       case Select(qual, name) =>
-        assert(!argssHavePrefix)
-        argssHavePrefix = true
-        prefixArg = Some(qual)
-        List()
+        prefixTree = qual
       case _ =>
-        List()
     }
-    var argss: List[List[Any]] = macroArgs(expandee)
-    val currentTyper = typer
-    object simpleMacroContext extends scala.reflect.makro.runtime.Context(global) {
-      val prefix = Expr(prefixArg map (_.asInstanceOf[this.mirror.Tree]) getOrElse this.mirror.EmptyTree)
-      val callsiteTyper = currentTyper.asInstanceOf[this.mirror.analyzer.Typer]
-    }
-    argss = List(simpleMacroContext) +: argss
+    collectMacroArgs(expandee)
+    var argss: List[List[Any]] = List(macroContext(prefixTree, typer)) :: exprArgs.toList
     macroTrace("argss: ")(argss)
 
     val macroDef = expandee.symbol
+    val numArgLists = exprArgs.length
     val numParamLists = macroDef.paramss.length
     if (numParamLists != numArgLists) {
       if (numArgLists == 0 && numParamLists == 1 && macroDef.paramss.head.isEmpty) {
@@ -744,14 +739,10 @@ trait Macros { self: Analyzer =>
 //          val paramPos = implRefTarg.deSkolemize.paramPos
           val paramPos = macroDef.typeParams.indexWhere(_.name == implRefTarg.name)
           typeArgs(paramPos).tpe
-        } else {
-          prefixArg match {
-            case Some(prefixArg) =>
-              implRefTarg.tpe.asSeenFrom(prefixArg.tpe, macroDef.owner)
-            case None =>
-              implRefTarg.tpe.asSeenFrom(macroDef.tpe, macroDef.owner)
-          }
-        }
+        } else
+          implRefTarg.tpe.asSeenFrom(
+            if (prefixTree == EmptyTree) macroDef.owner.tpe else prefixTree.tpe,
+            macroDef.owner)
       } else
         implRefTarg.tpe
       tpe

@@ -10,47 +10,19 @@ import java.lang.{Class => jClass}
 
 trait TypeTags { self: Universe =>
 
-  abstract class AbstractTag[T] {
-    def tpe: Type
-    def erasure: jClass[_]
-  }
-
-  abstract class ClassTag[T] extends AbstractTag[T] {
-    def tpe = classToType(erasure)
-  }
+  case class ClassTag[T](erasure: jClass[_])
   
-  def ClassTag[T](erasure: jClass[_]) = new ClassTag[T] {
-    def erasure = _erasure
-  }
-
   /** A tagged type tree */
-  abstract class TypeTag[T] extends AbstractTag[T] {
-    def erasure = typeToClass(tpe)
-  }
+  case class TypeTag[T](tpe: Type) 
 
-  def TypeTag[T](_tpe: Type) = new TypeTag[T] {
-    def tpe = _tpe
-  }
+  class GroundTypeTag[T](tpe: Type) extends TypeTag[T](tpe)
 
-  class GroundTypeTag[T] extends TypeTag[T]
-
-  def GroundTypeTag(_tpe: Type) = new GroundTypeTag[T] {
-    def tpe = _tpe
+  object GroundTypeTag {
+    def apply[T](tpe: Type) = new GroundTypeTag[T](tpe)
+    def unapply[T](ttag: GroundTypeTag[T]): Option[Type] = Some(ttag.tpe)
   }
   
   // [Martin]: why needed? I.e. Why not use implicitly?
   def typeTag[T](implicit typeTag: TypeTag[T]) = typeTag
-
-    /** Maps a Java class to a Scala type reference
-   *  @param   clazz    The Java class object
-   *  @return  A type (of kind `TypeRef`, or `ExistentialType` if `clazz` is polymorphic)
-   *           that represents the class with all type parameters unknown
-   *           (i.e. any type parameters of `clazz` are existentially quantified).
-   *  */
-  def classToType(clazz: java.lang.Class[_]): Type
-
-    /** Maps a Scala type to the corresponding Java class object
-   */
-  def typeToClass(tpe: Type): java.lang.Class[_]
 }
 

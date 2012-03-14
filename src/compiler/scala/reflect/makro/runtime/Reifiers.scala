@@ -814,6 +814,12 @@ trait Reifiers {
     }
   }
 
+  /** Reify type, but do not search for an implicit for the toplevel type.
+   *  If mustBeGround == true and the type contains type parameters or
+   *  abstract types without implicits, return an EmptyTree to indicate failure.
+   */
+  def reifyTypeNoSplice(tpe: Type, mustBeGround: Boolean = false): Tree = ???
+
   def unreifyTree(tree: Tree): Tree =
     Select(tree, definitions.ExprEval)
 

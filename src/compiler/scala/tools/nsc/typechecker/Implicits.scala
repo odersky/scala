@@ -101,6 +101,7 @@ trait Implicits {
   }
 
   private val ManifestSymbols = Set(PartialManifestClass, FullManifestClass, OptManifestClass)
+  private val TagSymbols = Set(ClassTagClass, TypeTagClass, GroundTypeTagClass)
 
   /* Map a polytype to one in which all type parameters and argument-dependent types are replaced by wildcards.
    * Consider `implicit def b(implicit x: A): x.T = error("")`. We need to approximate DebruijnIndex types
@@ -1085,6 +1086,24 @@ trait Implicits {
         implicitInfoss1
     }
 
+    // Problem: interaction of implicit search with undetermined type parameters not handled here.
+    // Need to push into macro context?
+    def tagOfType(pre: Type, tp: Type, tagClass: Symbol): SearchResult = {
+      assert(pre.isStable)
+      val qual = gen.mkAttributedRef(pre, tagClass.companionModule)
+      val appmeth = qual.symbol.info member nme.apply
+      val arg =
+        if (tagClass == ClassTagClass) gen.mkClassOf(tp)
+        else macroContext(EmptyTree, newTyper(context))
+          .reifyTypeNoSplice(tp, mustBeGround = tagClass == GroundTypeTagClass)
+      if (arg == EmptyTree)
+        SearchFailure
+      else
+        new SearchResult(
+          typedPos(tree.pos.focus)(gen.mkMethodCall(qual, appmeth, List(tp), List(arg))),
+          EmptyTreeTypeSubstituter)
+    }
+
     /** Creates a tree that calls the relevant factory method in object
       * reflect.Manifest for type 'tp'. An EmptyTree is returned if
       * no manifest is found. todo: make this instantiate take type params as well?
@@ -1184,6 +1203,8 @@ trait Implicits {
           case SearchFailure if sym == OptManifestClass => wrapResult(gen.mkAttributedRef(NoManifest))
           case result                                   => result
         }
+      case TypeRef(pre, sym, args) if TagSymbols(sym) =>
+        tagOfType(pre, args.head, sym)
       case tp@TypeRef(_, sym, _) if sym.isAbstractType =>
         implicitManifestOrOfExpectedType(tp.bounds.lo) // #3977: use tp (==pt.dealias), not pt (if pt is a type alias, pt.bounds.lo == pt)
       case _ =>

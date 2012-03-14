@@ -419,7 +419,7 @@ trait Importers { self: SymbolTable =>
     def importIdent(tree: from.Ident): Ident = importTree(tree).asInstanceOf[Ident]
     def importCaseDef(tree: from.CaseDef): CaseDef = importTree(tree).asInstanceOf[CaseDef]
     def importConstant(constant: from.Constant): Constant = new Constant(constant.tag match {
-      case ClassTag => importType(constant.value.asInstanceOf[from.Type])
+      case ClazzTag => importType(constant.value.asInstanceOf[from.Type])
       case EnumTag => importSymbol(constant.value.asInstanceOf[from.Symbol])
       case _ => constant.value
     })
