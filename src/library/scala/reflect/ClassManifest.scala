@@ -237,7 +237,7 @@ object ClassManifest {
   /** ClassManifest for the abstract type `prefix # name`. `upperBound` is not
     * strictly necessary as it could be obtained by reflection. It was
     * added so that erasure can be calculated without reflection.
-    * todo: remove after next boostrap
+    * todo: remove after next boostraptrait
     */
   def abstractType[T](prefix: OptManifest[_], name: String, upperbound: ClassManifest[_], args: OptManifest[_]*): ClassManifest[T] =
     new ClassManifest[T] {

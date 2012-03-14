@@ -124,6 +124,9 @@ trait StdNames extends NameManglers { self: SymbolTable =>
     final val List: NameType   = "List"
     final val Seq: NameType    = "Seq"
     final val Symbol: NameType = "Symbol"
+    final val ClassTag: NameType = "ClassTag"
+    final val TypeTag : NameType = "TypeTag"
+    final val GroundTypeTag: NameType = "GroundTypeTag"
 
     // fictions we use as both types and terms
     final val ERROR: NameType    = "<error>"
@@ -153,7 +156,6 @@ trait StdNames extends NameManglers { self: SymbolTable =>
     final val Singleton: NameType       = "Singleton"
     final val String: NameType          = "String"
     final val Throwable: NameType       = "Throwable"
-    final val TypeTag: NameType         = "TypeTag"
 
     final val Annotation: NameType          = "Annotation"
     final val ClassfileAnnotation: NameType = "ClassfileAnnotation"
@@ -287,7 +289,6 @@ trait StdNames extends NameManglers { self: SymbolTable =>
     val This: NameType                 = "This"
     val Tree : NameType                = "Tree"
     val TYPE_ : NameType               = "TYPE"
-    val TypeTag : NameType             = "TypeTag"
     val TypeTree: NameType             = "TypeTree"
     val UNIT : NameType                = "UNIT"
     val _isDefinedAt: NameType         = "_isDefinedAt"

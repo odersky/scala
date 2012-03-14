@@ -1017,7 +1017,7 @@ abstract class Erasure extends AddInterfaces
         case Match(selector, cases) =>
           Match(Typed(selector, TypeTree(selector.tpe)), cases)
 
-        case Literal(ct) if ct.tag == ClassTag
+        case Literal(ct) if ct.tag == ClazzTag
                          && ct.typeValue.typeSymbol != definitions.UnitClass =>
           treeCopy.Literal(tree, Constant(erasure(NoSymbol, ct.typeValue)))
 
