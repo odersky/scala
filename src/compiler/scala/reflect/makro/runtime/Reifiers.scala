@@ -31,7 +31,7 @@ trait Reifiers {
   object reifiedNodePrinters extends { val global: mirror.type = mirror } with tools.nsc.ast.NodePrinters with reflect.makro.runtime.ReifyPrinters
   val reifiedNodeToString = reifiedNodePrinters.reifiedNodeToString
 
-  def reifyTopLevel(any: Any) = {
+  def reifyTopLevel(any: Any, spliceTypes: Boolean = true, mustBeGround: Boolean = false) = {
     class Reifier {
       import definitions._
       import Reifier._
@@ -276,66 +276,70 @@ trait Reifiers {
         if (definedInLiftedCode(tpe))
           CannotReifyTypeInvolvingBoundType(tpe)
 
-        // @xeno.by: correct way of doing this?
-        val typetagTpe = SelectFromTypeTree(Ident(MacroContextClass), newTypeName("TypeTag"))
-        val typeTagInScope = typeCheck(TypeApply(Ident(newTermName("implicitly")), List(AppliedTypeTree(typetagTpe, List(TypeTree(tpe0))))))
+        if (tpe.typeSymbol.isAbstractType) {
+          // @xeno.by: correct way of doing this?
+          val typetagTpe = SelectFromTypeTree(Ident(MacroContextClass), newTypeName("TypeTag"))
+          val typeTagInScope = typeCheck(TypeApply(Ident(newTermName("implicitly")), List(AppliedTypeTree(typetagTpe, List(TypeTree(tpe0))))))
+          typeTagInScope match {
+            case Some(typeTagInScope) =>
+              val Apply(_, List(ref)) = typeTagInScope
+              return Select(ref, newTermName("tpe"))
+            case None =>
+              if (mustBeGround)
+                CannotReifyUnresolvedTypeParametersWhenMustBeGroundIsSet(tpe)
+          }
+        }
 
-        typeTagInScope match {
-          case Some(typeTagInScope) =>
-            val Apply(_, List(ref)) = typeTagInScope
-            Select(ref, newTermName("tpe"))
-          case None =>
-            val tsym = tpe.typeSymbol
-            if (tsym.isClass && tpe == tsym.typeConstructor && tsym.isStatic)
-              Select(reifySymRef(tpe.typeSymbol), nme.asTypeConstructor)
-            else tpe match {
-              case t @ NoType =>
-                reifyMirrorObject(t)
-              case t @ NoPrefix =>
-                reifyMirrorObject(t)
-              case t @ ThisType(root) if root == RootClass =>
-                mirrorSelect("definitions.RootClass.thisPrefix")
-              case t @ ThisType(empty) if empty == EmptyPackageClass =>
-                mirrorSelect("definitions.EmptyPackageClass.thisPrefix")
-              case t @ ThisType(clazz) if clazz.isModuleClass && clazz.isStatic =>
-                mirrorCall(nme.thisModuleType, reify(clazz.fullName))
-              case t @ RefinedType(parents, decls) =>
-                registerReifiableSymbol(tpe.typeSymbol)
-                mirrorFactoryCall(t, reify(parents), reify(decls), reify(t.typeSymbol))
-              case t @ ClassInfoType(parents, decls, clazz) =>
-                registerReifiableSymbol(clazz)
-                mirrorFactoryCall(t, reify(parents), reify(decls), reify(t.typeSymbol))
-              case t @ ExistentialType(tparams, underlying) =>
-                reifyTypeBinder(t, tparams, underlying)
-              case t @ PolyType(tparams, underlying) =>
-                reifyTypeBinder(t, tparams, underlying)
-              case t @ MethodType(params, restpe) =>
-                reifyTypeBinder(t, params, restpe)
-              case t @ AnnotatedType(anns, underlying, selfsym) =>
-                val saved1 = reifySymbols
-                val saved2 = reifyTypes
+        val tsym = tpe.typeSymbol
+        if (tsym.isClass && tpe == tsym.typeConstructor && tsym.isStatic)
+          Select(reifySymRef(tpe.typeSymbol), nme.asTypeConstructor)
+        else tpe match {
+          case t @ NoType =>
+            reifyMirrorObject(t)
+          case t @ NoPrefix =>
+            reifyMirrorObject(t)
+          case t @ ThisType(root) if root == RootClass =>
+            mirrorSelect("definitions.RootClass.thisPrefix")
+          case t @ ThisType(empty) if empty == EmptyPackageClass =>
+            mirrorSelect("definitions.EmptyPackageClass.thisPrefix")
+          case t @ ThisType(clazz) if clazz.isModuleClass && clazz.isStatic =>
+            mirrorCall(nme.thisModuleType, reify(clazz.fullName))
+          case t @ RefinedType(parents, decls) =>
+            registerReifiableSymbol(tpe.typeSymbol)
+            mirrorFactoryCall(t, reify(parents), reify(decls), reify(t.typeSymbol))
+          case t @ ClassInfoType(parents, decls, clazz) =>
+            registerReifiableSymbol(clazz)
+            mirrorFactoryCall(t, reify(parents), reify(decls), reify(t.typeSymbol))
+          case t @ ExistentialType(tparams, underlying) =>
+            reifyTypeBinder(t, tparams, underlying)
+          case t @ PolyType(tparams, underlying) =>
+            reifyTypeBinder(t, tparams, underlying)
+          case t @ MethodType(params, restpe) =>
+            reifyTypeBinder(t, params, restpe)
+          case t @ AnnotatedType(anns, underlying, selfsym) =>
+            val saved1 = reifySymbols
+            val saved2 = reifyTypes
 
-                try {
-                  // one more quirk of reifying annotations
-                  //
-                  // when reifying AnnotatedTypes we need to reify all the types and symbols of inner ASTs
-                  // that's because a lot of logic expects post-typer trees to have non-null tpes
-                  //
-                  // Q: reified trees are pre-typer, so there's shouldn't be a problem.
-                  //    reflective typechecker will fill in missing symbols and types, right?
-                  // A: actually, no. annotation ASTs live inside AnnotatedTypes,
-                  //    and insides of the types is the place where typechecker doesn't look.
-                  reifySymbols = true
-                  reifyTypes = true
-                  if (reifyDebug) println("reify AnnotatedType: " + tpe)
-                  reifyProductUnsafe(tpe)
-                } finally {
-                  reifySymbols = saved1
-                  reifyTypes = saved2
-                }
-              case _ =>
-                reifyProductUnsafe(tpe)
+            try {
+              // one more quirk of reifying annotations
+              //
+              // when reifying AnnotatedTypes we need to reify all the types and symbols of inner ASTs
+              // that's because a lot of logic expects post-typer trees to have non-null tpes
+              //
+              // Q: reified trees are pre-typer, so there's shouldn't be a problem.
+              //    reflective typechecker will fill in missing symbols and types, right?
+              // A: actually, no. annotation ASTs live inside AnnotatedTypes,
+              //    and insides of the types is the place where typechecker doesn't look.
+              reifySymbols = true
+              reifyTypes = true
+              if (reifyDebug) println("reify AnnotatedType: " + tpe)
+              reifyProductUnsafe(tpe)
+            } finally {
+              reifySymbols = saved1
+              reifyTypes = saved2
             }
+          case _ =>
+            reifyProductUnsafe(tpe)
         }
       }
 
@@ -461,6 +465,7 @@ trait Reifiers {
           case Literal(constant @ Constant(sym: Symbol)) if boundSyms contains sym =>
             CannotReifyClassOfBoundEnum(tree, constant.tpe)
           case Select(expr, _) if tree.symbol == definitions.ExprEval =>
+            // todo. add collect to Tree
             Select(expr, nme.tree)
           case Select(expr, _) if tree.symbol == definitions.ExprValue =>
             // todo. create a temp variable, splice expr.tree into it, refer this variable from here
@@ -780,6 +785,11 @@ trait Reifiers {
       def CannotReifyAnnotationInvolvingBoundType(ann: AnnotationInfo) = {
         val msg = "implementation restriction: cannot reify annotation @%s which involves a symbol declared inside the block being reified".format(ann)
         throw new ReificationError(ann.original.pos, msg)
+      }
+
+      def CannotReifyUnresolvedTypeParametersWhenMustBeGroundIsSet(tpe: Type) = {
+        val msg = "cannot reify unresolved type parameters when mustBeGround is set: %s".format(tpe)
+        throw new ReificationError(NoPosition, msg)
       }
     }
 
