@@ -406,6 +406,8 @@ trait StdNames extends NameManglers { self: SymbolTable =>
     val withFilter: NameType           = "withFilter"
     val zip: NameType                  = "zip"
 
+    val synthSwitch: NameType          = "$synthSwitch"
+
     // unencoded operators
     object raw {
       final val AMP  : NameType  = "&"
