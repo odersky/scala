@@ -379,7 +379,7 @@ trait MethodSynthesis {
         result
       }
       def derivedTree: DefDef          = util.trace("derivedTree = ")(
-        factoryMeth(mods & flagsMask | flagsExtra, name, tree, symbolic = false)
+        factoryMeth(mods & flagsMask | flagsExtra, name, tree)
       )
       def flagsExtra: Long             = METHOD | IMPLICIT
       def flagsMask: Long              = AccessFlags
