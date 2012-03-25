@@ -58,7 +58,18 @@ trait CompilationUnits { self: Global =>
      */
     val synthetics = mutable.HashMap[Symbol, Tree]()
 
-    /** things to check at end of compilation unit */
+   /** A map from symbols to the definitions they generate. The map is populated in Namers
+     * and bindings are removed again in Typers.
+     * A binding `sym -> trees` in the map says that
+     * trees need to be added to the statement sequence in which `sym` is defined.
+     * Furthermore, if there is already a tree in the statement sequence that defines
+     * `sym`, that tree is _replaced_ by the new trees in `lateDefs`.
+     * On the other hand, if `sym` is not yet defined in the statement sequence the
+     * trees in `lateDefs(sym)` are simply added at the end of the statement sequence. 
+     */
+    val lateDefs = mutable.HashMap[Symbol, List[Tree]]()
+
+     /** things to check at end of compilation unit */
     val toCheck = new ListBuffer[() => Unit]
 
     def position(pos: Int) = source.position(pos)

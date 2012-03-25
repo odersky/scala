@@ -696,6 +696,14 @@ trait Namers extends MethodSynthesis {
       tree.symbol
     }
 
+    def enterLateDef(tree: Tree, original: Symbol = NoSymbol): Symbol = {
+      enterSym(tree)
+      val key = original orElse tree.symbol
+      context.unit.lateDefs +=
+        key -> (tree :: (context.unit.lateDefs getOrElse (key, Nil)))
+      tree.symbol
+    }
+
 // --- Lazy Type Assignment --------------------------------------------------
 
     def initializeLowerBounds(tp: Type): Type = {

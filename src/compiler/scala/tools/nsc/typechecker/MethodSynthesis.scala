@@ -372,7 +372,7 @@ trait MethodSynthesis {
      */
     case class ImplicitClassWrapper(tree: ClassDef) extends DerivedFromClassDef {
       def completer(sym: Symbol): Type = ??? // not needed
-      def createAndEnterSymbol(): Symbol = enterSyntheticSym(derivedTree)
+      def createAndEnterSymbol(): Symbol = enterLateDef(derivedTree, tree.symbol)
       def derivedSym: Symbol = {
         val result = enclClass.info decl name
         assert(result != NoSymbol, "not found: "+name+" in "+enclClass+" "+enclClass.info.decls)

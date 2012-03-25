@@ -528,6 +528,7 @@ class Global(settings: Settings, _reporter: Reporter, projectName: String = "")
     unit.depends.clear()
     unit.defined.clear()
     unit.synthetics.clear()
+    unit.lateDefs.clear()
     unit.toCheck.clear()
     unit.targetPos = NoPosition
     unit.contexts.clear()

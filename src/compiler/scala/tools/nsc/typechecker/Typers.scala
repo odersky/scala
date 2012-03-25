@@ -2444,11 +2444,16 @@ trait Typers extends Modes with Adaptations with PatMatVirtualiser {
         var moreToAdd = true
         while (moreToAdd) {
           val initElems = scope.elems
-          for (sym <- scope)
+          for (sym <- scope) {
             for (tree <- context.unit.synthetics get sym) {
               newStats += typedStat(tree) // might add even more synthetics to the scope
               context.unit.synthetics -= sym
             }
+            for (trees <- context.unit.lateDefs get sym; tree <- trees.reverse) {
+              newStats += typedStat(tree) // might add even more synthetics to the scope
+              context.unit.lateDefs -= sym
+            }
+          }
           // the type completer of a synthetic might add more synthetics. example: if the
           // factory method of a case class (i.e. the constructor) has a default.
           moreToAdd = scope.elems ne initElems
@@ -2482,8 +2487,25 @@ trait Typers extends Modes with Adaptations with PatMatVirtualiser {
         }
       }
 
+      // Expand late definitions that correspond to one of the existing statements in stats
+      // But take care not to copy stat trees unless necesary.
+      val stats0 = {
+        var changed = false
+        def expandStat(stat: Tree): List[Tree] =
+          context.unit.lateDefs get stat.symbol match {
+            case Some(newstats) if stat.isDef =>
+              changed = true
+              context.unit.lateDefs -= stat.symbol
+              newstats
+            case _ => List(stat)
+          }
+        val newstats = stats flatMap expandStat
+        if (changed) newstats else stats
+      }
+
+      // [Martin to Hubert]I don't understand what the context juggling is good for here?
       val stats1 = withSavedContext(context) {
-        val result = stats mapConserve typedStat
+        val result = stats0 mapConserve typedStat
         context.flushBuffer()
         result
       }
