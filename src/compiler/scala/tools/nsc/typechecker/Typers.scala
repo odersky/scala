@@ -2362,10 +2362,12 @@ trait Typers extends Modes with Adaptations with PatMatVirtualiser {
 
     def typedStats(stats: List[Tree], exprOwner: Symbol): List[Tree] = {
       val inBlock = exprOwner == context.owner
+      val scope = if (inBlock) context.scope else context.owner.info.decls
       def includesTargetPos(tree: Tree) =
         tree.pos.isRange && context.unit.exists && (tree.pos includes context.unit.targetPos)
       val localTarget = stats exists includesTargetPos
-      val statsErrors = scala.collection.mutable.LinkedHashSet[AbsTypeError]()
+      //val statsErrors = scala.collection.mutable.LinkedHashSet[AbsTypeError]()
+
       def typedStat(stat: Tree): Tree = {
         if (context.owner.isRefinementClass && !treeInfo.isDeclarationOrTypeDef(stat))
           OnlyDeclarationsError(stat)
@@ -2382,7 +2384,7 @@ trait Typers extends Modes with Adaptations with PatMatVirtualiser {
                 stat
               } else {
                 val localTyper = if (inBlock || (stat.isDef && !stat.isInstanceOf[LabelDef])) {
-                  context.flushBuffer()
+                  //context.flushBuffer()
                   this
                 } else newTyper(context.make(stat, exprOwner))
                 // XXX this creates a spurious dead code warning if an exception is thrown
@@ -2399,22 +2401,17 @@ trait Typers extends Modes with Adaptations with PatMatVirtualiser {
                   "a pure expression does nothing in statement position; " +
                   "you may be omitting necessary parentheses"
                 )
-                statsErrors ++= localTyper.context.errBuffer
+                //statsErrors ++= localTyper.context.errBuffer
                 result
               }
           }
       }
 
-      /** 'accessor' and 'accessed' are so similar it becomes very difficult to
-       *  follow the logic, so I renamed one to something distinct.
-       */
-      def accesses(looker: Symbol, accessed: Symbol) = accessed.hasLocalFlag && (
+      def checkNoDoubleDefs(): Unit = {
+        def accesses(looker: Symbol, accessed: Symbol) = accessed.hasLocalFlag && (
            (accessed.isParamAccessor)
-        || (looker.hasAccessorFlag && !accessed.hasAccessorFlag && accessed.isPrivate)
-      )
-
-      def checkNoDoubleDefs(stats: List[Tree]): Unit = {
-        val scope = if (inBlock) context.scope else context.owner.info.decls
+           || (looker.hasAccessorFlag && !accessed.hasAccessorFlag && accessed.isPrivate)
+        )
         var e = scope.elems
         while ((e ne null) && e.owner == scope) {
           var e1 = scope.lookupNextEntry(e)
@@ -2438,83 +2435,39 @@ trait Typers extends Modes with Adaptations with PatMatVirtualiser {
         }
       }
 
-      def addSynthetics(stats: List[Tree]): List[Tree] = {
-        val scope = if (inBlock) context.scope else context.owner.info.decls
-        var newStats = new ListBuffer[Tree]
+      val newStats = new ListBuffer[Tree]
+
+      def processStat(sym: Symbol, oldstat: Tree = EmptyTree): Unit = {
+        sym.initialize
+        val (newstat, dependent) = context.unit.lateDefs.remove(sym)
+        if (newstat != EmptyTree) { log("processStat new " + sym + " " + newstat); newStats += typedStat(newstat) }
+        else if (oldstat != EmptyTree) { log("processStat old " + sym + " " + newstat); newStats += typedStat(oldstat) }
+        for (dep <- dependent) processStat(dep)
+      }
+
+      for (stat <- stats)
+        processStat(if (stat.isDef) stat.symbol else NoSymbol, stat)
+
+      if (!phase.erasedTypes && !context.owner.isPackageClass) {
+        // there are two reasons for excluding package members from
+        // double def checking and sythetics generation
+        // (1) since package scopes tend to be large, this could speed up things
+        // (2) package members can be visited many times during type checking
+        // This means that a companion object might be inserted far form its companion
+        // class by travsering synthetic late bound members. But we want to
+        // wait for the companion class to be generated so that the companion object
+        // is generated next to it.
+        checkNoDoubleDefs()
         var moreToAdd = true
         while (moreToAdd) {
           val initElems = scope.elems
-          for (sym <- scope) {
-            for (tree <- context.unit.synthetics get sym) {
-              newStats += typedStat(tree) // might add even more synthetics to the scope
-              context.unit.synthetics -= sym
-            }
-            for (trees <- context.unit.lateDefs get sym; tree <- trees.reverse) {
-              newStats += typedStat(tree) // might add even more synthetics to the scope
-              context.unit.lateDefs -= sym
-            }
-          }
+          for (sym <- scope) processStat(sym)
           // the type completer of a synthetic might add more synthetics. example: if the
           // factory method of a case class (i.e. the constructor) has a default.
           moreToAdd = scope.elems ne initElems
         }
-        if (newStats.isEmpty) stats
-        else {
-          // put default getters next to the method they belong to,
-          // same for companion objects. fixes #2489 and #4036.
-          // [Martin] This is pretty ugly. I think we could avoid
-          // this code by associating defaults and companion objects
-          // with the original tree instead of the new symbol.
-          def matches(stat: Tree, synt: Tree) = (stat, synt) match {
-            case (DefDef(_, statName, _, _, _, _), DefDef(mods, syntName, _, _, _, _)) =>
-              mods.hasDefaultFlag && syntName.toString.startsWith(statName.toString)
-
-            case (ClassDef(_, className, _, _), ModuleDef(_, moduleName, _)) =>
-              className.toTermName == moduleName
-
-            case _ => false
-          }
-
-          def matching(stat: Tree): List[Tree] = {
-            val (pos, neg) = newStats.partition(synt => matches(stat, synt))
-            newStats = neg
-            pos.toList
-          }
-
-          (stats foldRight List[Tree]())((stat, res) => {
-            stat :: matching(stat) ::: res
-          }) ::: newStats.toList
-        }
       }
-
-      // Expand late definitions that correspond to one of the existing statements in stats
-      // But take care not to copy stat trees unless necesary.
-      val stats0 = {
-        var changed = false
-        def expandStat(stat: Tree): List[Tree] =
-          context.unit.lateDefs get stat.symbol match {
-            case Some(newstats) if stat.isDef =>
-              changed = true
-              context.unit.lateDefs -= stat.symbol
-              newstats
-            case _ => List(stat)
-          }
-        val newstats = stats flatMap expandStat
-        if (changed) newstats else stats
-      }
-
-      // [Martin to Hubert]I don't understand what the context juggling is good for here?
-      val stats1 = withSavedContext(context) {
-        val result = stats0 mapConserve typedStat
-        context.flushBuffer()
-        result
-      }
-      context.updateBuffer(statsErrors)
-      if (phase.erasedTypes) stats1
-      else {
-        checkNoDoubleDefs(stats1)
-        addSynthetics(stats1)
-      }
+      if (stats == newStats) stats else newStats.toList
     }
 
     def typedArg(arg: Tree, mode: Int, newmode: Int, pt: Type): Tree = {
@@ -4877,6 +4830,11 @@ trait Typers extends Modes with Adaptations with PatMatVirtualiser {
     }
 
     def typedTypeConstructor(tree: Tree): Tree = typedTypeConstructor(tree, NOmode)
+
+    def typeAndPack(tree: Tree, pt: Type): Type = {
+      val tree1 = typed(tree, pt)
+      packedType(tree1, context.owner)
+    }
 
     def computeType(tree: Tree, pt: Type): Type = {
       val tree1 = typed(tree, pt)

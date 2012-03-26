@@ -401,8 +401,7 @@ trait Namers extends MethodSynthesis {
         setPrivateWithin(tree, m)
         if (m.moduleClass != NoSymbol)
           setPrivateWithin(tree, m.moduleClass)
-
-        context.unit.synthetics -= m
+        context.unit.lateDefs.remove(m)
         tree.symbol = m
       }
       else {
@@ -456,7 +455,7 @@ trait Namers extends MethodSynthesis {
       // The object Foo is still in scope, but because it is not compiled in current run
       // it should be ditched and a new one created.
       if (m != NoSymbol && currentRun.compiles(m)) m
-      else enterSyntheticSym(atPos(cdef.pos.focus)(creator(cdef)))
+      else enterLateDef(atPos(cdef.pos.focus)(creator(cdef)), cdef.symbol)
     }
 
     private def checkSelectors(tree: Import): Unit = {
@@ -690,17 +689,10 @@ trait Namers extends MethodSynthesis {
       this.context
     }
 
-    def enterSyntheticSym(tree: Tree): Symbol = {
+   def enterLateDef(tree: Tree, original: Symbol = NoSymbol): Symbol = {
       enterSym(tree)
-      context.unit.synthetics(tree.symbol) = tree
-      tree.symbol
-    }
-
-    def enterLateDef(tree: Tree, original: Symbol = NoSymbol): Symbol = {
-      enterSym(tree)
-      val key = original orElse tree.symbol
-      context.unit.lateDefs +=
-        key -> (tree :: (context.unit.lateDefs getOrElse (key, Nil)))
+      context.unit.lateDefs.enter(tree, original)
+      log("enter late "+tree.symbol+" from "+original)
       tree.symbol
     }
 
@@ -828,7 +820,7 @@ trait Namers extends MethodSynthesis {
     }
 
     private def assignTypeToTree(tree: ValOrDefDef, tpe: Type): Type = {
-      tree.tpt defineType tpe setPos tree.pos.focus
+      (tree.tpt defineType tpe) setPos tree.pos.focus
       tree.tpt.tpe
     }
 
@@ -1169,7 +1161,7 @@ trait Namers extends MethodSynthesis {
             }
             if (!isConstr)
               clazz.resetFlag(INTERFACE) // there's a concrete member now
-            val default = parentNamer.enterSyntheticSym(defaultTree)
+            val default = parentNamer.enterLateDef(defaultTree, meth)
             if (forInteractive && default.owner.isTerm) {
               // enter into map from method symbols to default arguments.
               // if compiling the same local block several times (which can happen in interactive mode)
@@ -1237,13 +1229,13 @@ trait Namers extends MethodSynthesis {
      */
     def addApplyUnapply(cdef: ClassDef, namer: Namer) {
       if (!cdef.symbol.hasAbstractFlag)
-        namer.enterSyntheticSym(caseModuleApplyMeth(cdef))
+        namer.enterLateDef(caseModuleApplyMeth(cdef))
 
-      namer.enterSyntheticSym(caseModuleUnapplyMeth(cdef))
+      namer.enterLateDef(caseModuleUnapplyMeth(cdef))
     }
 
     def addCopyMethod(cdef: ClassDef, namer: Namer) {
-      caseClassCopyMeth(cdef) foreach namer.enterSyntheticSym
+      caseClassCopyMeth(cdef) foreach (namer.enterLateDef(_))
     }
 
     def typeSig(tree: Tree): Type = {

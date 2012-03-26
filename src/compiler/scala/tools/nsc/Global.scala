@@ -40,11 +40,12 @@ class Global(var currentSettings: Settings, var reporter: Reporter) extends Symb
                                                                       with Reifiers
                                                                       with TreePrinters
                                                                       with DocComments
+                                                                      with LateDefinitions
                                                                       with MacroContext
                                                                       with symtab.Positions {
 
   override def settings = currentSettings
-  
+
   import definitions.{ findNamedMember, findMemberFromRoot }
 
   // alternate constructors ------------------------------------------
@@ -61,7 +62,7 @@ class Global(var currentSettings: Settings, var reporter: Reporter) extends Symb
   type AbstractFileType = scala.tools.nsc.io.AbstractFile
 
   def mkAttributedQualifier(tpe: Type, termSym: Symbol): Tree = gen.mkAttributedQualifier(tpe, termSym)
-  
+
   def picklerPhase: Phase = if (currentRun.isDefined) currentRun.picklerPhase else NoPhase
 
   // platform specific elements
@@ -215,7 +216,7 @@ class Global(var currentSettings: Settings, var reporter: Reporter) extends Symb
   def logAfterEveryPhase[T](msg: String)(op: => T) {
     log("Running operation '%s' after every phase.\n".format(msg) + describeAfterEveryPhase(op))
   }
-  
+
   def shouldLogAtThisPhase = (
        (settings.log.isSetByUser)
     && ((settings.log containsPhase globalPhase) || (settings.log containsPhase phase))
@@ -1112,7 +1113,7 @@ class Global(var currentSettings: Settings, var reporter: Reporter) extends Symb
 
     def phaseNamed(name: String): Phase =
       findOrElse(firstPhase.iterator)(_.name == name)(NoPhase)
-    
+
     /** All phases as of 3/2012 here for handiness; the ones in
      *  active use uncommented.
      */

@@ -494,7 +494,7 @@ trait MethodSynthesis {
           )
         }
       }
-      override def createAndEnterSymbol(): Symbol = enterSyntheticSym(derivedTree)
+      override def createAndEnterSymbol(): Symbol = enterLateDef(derivedTree)
     }
     case class BooleanBeanGetter(tree: ValDef) extends BeanAccessor("is") with AnyBeanGetter { }
     case class BeanGetter(tree: ValDef) extends BeanAccessor("get") with AnyBeanGetter { }
