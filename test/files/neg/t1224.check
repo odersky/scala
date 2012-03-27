@@ -1,4 +1,4 @@
-t1224.scala:4: error: illegal cyclic reference involving type T
- type T >: C[T] <: C[C[T]]
-      ^
+t1224.scala:3: error: illegal cyclic reference involving type T
+abstract class A {
+               ^
 one error found

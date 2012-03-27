@@ -221,6 +221,12 @@ trait Trees { self: Universe =>
       }
       productIterator.toList flatMap subtrees
     }
+    
+    /** If this tree is not an EmptyTree, return it, otherwise
+     * return `that`
+     */
+    def orElse(that: => Tree) = 
+      if (this == EmptyTree) that else this
 
     /** Make a copy of this tree, keeping all attributes,
      *  except that all positions are focused (so nothing

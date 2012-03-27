@@ -113,7 +113,7 @@ trait Unapplies extends ast.TreeDSL
   private def toIdent(x: DefTree) = Ident(x.name) setPos x.pos.focus
 
   private def classType(cdef: ClassDef, tparams: List[TypeDef]): Tree = {
-    val tycon = REF(cdef.symbol)
+    val tycon = Ident(cdef.symbol)
     if (tparams.isEmpty) tycon else AppliedTypeTree(tycon, tparams map toIdent)
   }
 
@@ -166,14 +166,19 @@ trait Unapplies extends ast.TreeDSL
 
   /** The apply method corresponding to a case class
    */
-  def caseModuleApplyMeth(cdef: ClassDef): DefDef = {
+  def factoryMeth(mods: Modifiers, name: TermName, cdef: ClassDef): DefDef = {
     val tparams   = cdef.tparams map copyUntypedInvariant
     val cparamss  = constrParamss(cdef)
+    def classtpe = classType(cdef, tparams)
     atPos(cdef.pos.focus)(
-      DefDef(caseMods, nme.apply, tparams, cparamss, classType(cdef, tparams),
-        New(classType(cdef, tparams), mmap(cparamss)(gen.paramToArg)))
+      DefDef(mods, name, tparams, cparamss, classtpe,
+        New(classtpe, mmap(cparamss)(gen.paramToArg)))
     )
   }
+
+  /** The apply method corresponding to a case class
+   */
+  def caseModuleApplyMeth(cdef: ClassDef): DefDef = factoryMeth(caseMods, nme.apply, cdef)
 
   /** The unapply method corresponding to a case class
    */

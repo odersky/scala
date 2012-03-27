@@ -99,7 +99,7 @@ trait Namers extends MethodSynthesis {
       owner.unsafeTypeParams foreach (paramContext.scope enter _)
       newNamer(paramContext)
     }
-    
+
     def enclosingNamerWithScope(scope: Scope) = {
       var cx = context
       while (cx != NoContext && cx.scope != scope) cx = cx.outer
@@ -235,6 +235,7 @@ trait Namers extends MethodSynthesis {
           scope unlink prev.sym // let them co-exist...
           // FIXME: The comment "let them co-exist" is confusing given that the
           // line it comments unlinks one of them.  What does it intend?
+          // [Martin] Unlinking does not mean that the symbol goes away.
         }
       }
       scope enter sym
@@ -401,8 +402,7 @@ trait Namers extends MethodSynthesis {
         setPrivateWithin(tree, m)
         if (m.moduleClass != NoSymbol)
           setPrivateWithin(tree, m.moduleClass)
-
-        context.unit.synthetics -= m
+        context.unit.lateDefs.remove(m)
         tree.symbol = m
       }
       else {
@@ -456,7 +456,7 @@ trait Namers extends MethodSynthesis {
       // The object Foo is still in scope, but because it is not compiled in current run
       // it should be ditched and a new one created.
       if (m != NoSymbol && currentRun.compiles(m)) m
-      else enterSyntheticSym(atPos(cdef.pos.focus)(creator(cdef)))
+      else enterLateDef(atPos(cdef.pos.focus)(creator(cdef)), cdef.symbol)
     }
 
     private def checkSelectors(tree: Import): Unit = {
@@ -665,10 +665,12 @@ trait Namers extends MethodSynthesis {
           "If possible, define " + tree.symbol + " in " + owner.skipPackageObject + " instead."
         )
       }
-      
+
       // Suggested location only.
-      if (mods.isImplicit)
-        enterImplicitClass(tree)
+      if (mods.isImplicit) {
+        println("enter implicit wrapper "+tree+", owner = "+owner)
+        enterImplicitWrapper(tree)
+      }
     }
 
     // this logic is needed in case typer was interrupted half
@@ -688,9 +690,10 @@ trait Namers extends MethodSynthesis {
       this.context
     }
 
-    def enterSyntheticSym(tree: Tree): Symbol = {
+   def enterLateDef(tree: Tree, original: Symbol = NoSymbol): Symbol = {
       enterSym(tree)
-      context.unit.synthetics(tree.symbol) = tree
+      context.unit.lateDefs.enter(tree, original)
+      log("enter late "+tree.symbol+" from "+original)
       tree.symbol
     }
 
@@ -806,19 +809,30 @@ trait Namers extends MethodSynthesis {
       else if (!sym.isFinal) tpe1
       else tpe
     }
+
     /** Computes the type of the body in a ValDef or DefDef, and
-     *  assigns the type to the tpt's node.  Returns the type.
+     *  assigns the type to the tpt's node. lateDef.enters the definition with the transformed
+     *  rhs for later integration during type checking.
+     *  Returns the type.
      */
-    private def assignTypeToTree(tree: ValOrDefDef, defnTyper: Typer, pt: Type): Type = {
+    private def assignTypeToTree[T <: ValOrDefDef]
+                                (tree: T, defnTyper: Typer, pt: Type, copier: (T, Tree) => Tree): Type = {
       // compute result type from rhs
-      val typedBody = defnTyper.computeType(tree.rhs, pt)
-      val sym       = if (owner.isMethod) owner else tree.symbol
-      val typedDefn = widenIfNecessary(sym, typedBody, pt)
-      assignTypeToTree(tree, typedDefn)
+      val (rhs1, rhsType) = defnTyper.packedTyped(tree.rhs, pt)
+      val sym = if (owner.isMethod) owner else tree.symbol
+      val defnType = widenIfNecessary(sym, rhsType, pt)
+      if (settings.Yxnamer.value) {
+      	val tree1 = copier(tree, rhs1).asInstanceOf[ValOrDefDef]
+      	context.unit.lateDefs.enter(tree1)
+      	tree.symbol setFlag INFERRED
+      	//println("infer: "+tree1)
+      	assignTypeToTree(tree1, defnType)
+      } else
+      	assignTypeToTree(tree, defnType)
     }
 
     private def assignTypeToTree(tree: ValOrDefDef, tpe: Type): Type = {
-      tree.tpt defineType tpe setPos tree.pos.focus
+      (tree.tpt defineType tpe) setPos tree.pos.focus
       tree.tpt.tpe
     }
 
@@ -1043,7 +1057,8 @@ trait Namers extends MethodSynthesis {
             // replace deSkolemized symbols with skolemized ones
             // (for resultPt computed by looking at overridden symbol, right?)
             val pt = resultPt.substSym(tparamSyms, tparams map (_.symbol))
-            assignTypeToTree(ddef, typer, pt)
+            assignTypeToTree(ddef, typer, pt,
+                treeCopy.DefDef(_: DefDef, ddef.mods, ddef.name, ddef.tparams, ddef.vparamss, ddef.tpt, _))
           }
         )
         // #2382: return type of default getters are always @uncheckedVariance
@@ -1159,7 +1174,7 @@ trait Namers extends MethodSynthesis {
             }
             if (!isConstr)
               clazz.resetFlag(INTERFACE) // there's a concrete member now
-            val default = parentNamer.enterSyntheticSym(defaultTree)
+            val default = parentNamer.enterLateDef(defaultTree, meth)
             if (forInteractive && default.owner.isTerm) {
               // enter into map from method symbols to default arguments.
               // if compiling the same local block several times (which can happen in interactive mode)
@@ -1227,13 +1242,13 @@ trait Namers extends MethodSynthesis {
      */
     def addApplyUnapply(cdef: ClassDef, namer: Namer) {
       if (!cdef.symbol.hasAbstractFlag)
-        namer.enterSyntheticSym(caseModuleApplyMeth(cdef))
+        namer.enterLateDef(caseModuleApplyMeth(cdef))
 
-      namer.enterSyntheticSym(caseModuleUnapplyMeth(cdef))
+      namer.enterLateDef(caseModuleUnapplyMeth(cdef))
     }
 
     def addCopyMethod(cdef: ClassDef, namer: Namer) {
-      caseClassCopyMeth(cdef) foreach namer.enterSyntheticSym
+      caseClassCopyMeth(cdef) foreach (namer.enterLateDef(_))
     }
 
     def typeSig(tree: Tree): Type = {
@@ -1306,7 +1321,8 @@ trait Namers extends MethodSynthesis {
               MissingParameterOrValTypeError(tpt)
               ErrorType
             }
-            else assignTypeToTree(vdef, newTyper(typer1.context.make(vdef, sym)), WildcardType)
+            else assignTypeToTree(vdef, newTyper(typer1.context.make(vdef, sym)), WildcardType,
+                treeCopy.ValDef(_: ValDef, vdef.mods, vdef.name, vdef.tpt, _))
           }
           else typer1.typedType(tpt).tpe
 
@@ -1319,9 +1335,10 @@ trait Namers extends MethodSynthesis {
           if (expr1.symbol != null && expr1.symbol.isRootPackage)
             RootImportError(tree)
 
-          val newImport = treeCopy.Import(tree, expr1, selectors).asInstanceOf[Import]
+          val newImport = treeCopy.Import(tree, expr1, selectors)
           checkSelectors(newImport)
-          transformed(tree) = newImport
+          if (settings.Yxnamer.value) context.unit.lateDefs.enter(newImport)
+          else transformed(tree) = newImport
           // copy symbol and type attributes back into old expression
           // so that the structure builder will find it.
           expr.symbol = expr1.symbol
@@ -1408,10 +1425,10 @@ trait Namers extends MethodSynthesis {
       if (sym.isImplicit) {
         if (sym.isConstructor)
           fail(ImplicitConstr)
-        if (!sym.isTerm)
-          fail(ImplicitNotTerm)
+        if (!(sym.isTerm || (sym.isClass && !sym.isTrait)))
+          fail(ImplicitNotTermOrClass)
         if (sym.owner.isPackageClass)
-          fail(ImplicitTopObject)
+          fail(ImplicitAtToplevel)
       }
       if (sym.isClass) {
         if (sym.isAnyOverride && !sym.hasFlag(TRAIT))

@@ -83,7 +83,7 @@ trait Macros { self: Analyzer =>
   def addMacroMethods(templ: Template, namer: Namer): Unit = {
     for (ddef @ DefDef(mods, _, _, _, _, _) <- templ.body if mods hasFlag MACRO) {
       val trace = scala.tools.nsc.util.trace when settings.Ymacrodebug.value
-      val sym = namer.enterSyntheticSym(trace("macro def: ")(macroMethDef(ddef)))
+      val sym = namer.enterLateDef(trace("macro def: ")(macroMethDef(ddef)))
       trace("added to "+namer.context.owner.enclClass+": ")(sym)
     }
   }

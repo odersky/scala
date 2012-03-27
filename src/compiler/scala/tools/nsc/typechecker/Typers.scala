@@ -39,6 +39,7 @@ trait Typers extends Modes with Adaptations with PatMatVirtualiser {
   // namer calls typer.computeType(rhs) on DefDef / ValDef when tpt is empty. the result
   // is cached here and re-used in typedDefDef / typedValDef
   // Also used to cache imports type-checked by namer.
+  // Used only if -Yxnamer is not set
   val transformed = new mutable.HashMap[Tree, Tree]
 
   final val shortenImports = false
@@ -48,7 +49,7 @@ trait Typers extends Modes with Adaptations with PatMatVirtualiser {
     resetContexts()
     resetNamer()
     resetImplicits()
-    transformed.clear()
+    if (!settings.Yxnamer.value) transformed.clear()
   }
 
   object UnTyper extends Traverser {
@@ -1648,7 +1649,7 @@ trait Typers extends Modes with Adaptations with PatMatVirtualiser {
 
       val body =
         if (isPastTyper || reporter.hasErrors) templ.body
-        else templ.body flatMap rewrappingWrapperTrees(namer.finishGetterSetter(Typer.this, _))
+        else templ.body flatMap rewrappingWrapperTrees(namer.addDerivedTrees(Typer.this, _))
 
       val body1 = typedStats(body, templ.symbol)
 
@@ -1700,7 +1701,7 @@ trait Typers extends Modes with Adaptations with PatMatVirtualiser {
             LocalVarUninitializedError(vdef)
           vdef.rhs
         } else {
-          val tpt2 = if (sym.hasDefault) {
+          val pt1 = if (sym.hasDefault) {
             // When typechecking default parameter, replace all type parameters in the expected type by Wildcard.
             // This allows defining "def foo[T](a: T = 1)"
             val tparams = sym.owner.skipConstructor.info.typeParams
@@ -1716,7 +1717,7 @@ trait Typers extends Modes with Adaptations with PatMatVirtualiser {
               else subst(tpt1.tpe.typeArgs(0))
             else subst(tpt1.tpe)
           } else tpt1.tpe
-          newTyper(typer1.context.make(vdef, sym)).transformedOrTyped(vdef.rhs, EXPRmode | BYVALmode, tpt2)
+          newTyper(typer1.context.make(vdef, sym)).typedRhs(vdef, EXPRmode | BYVALmode, pt1)
         }
       treeCopy.ValDef(vdef, typedMods, vdef.name, tpt1, checkDead(rhs1)) setType NoType
     }
@@ -1904,7 +1905,7 @@ trait Typers extends Modes with Adaptations with PatMatVirtualiser {
         } else if (meth.isMacro) {
           EmptyTree
         } else {
-          transformedOrTyped(ddef.rhs, EXPRmode, tpt1.tpe)
+          typedRhs(ddef, EXPRmode, tpt1.tpe)
         }
 
         if (meth.isPrimaryConstructor && meth.isClassConstructor && !isPastTyper && !reporter.hasErrors && !meth.owner.isSubClass(AnyValClass)) {
@@ -2356,10 +2357,13 @@ trait Typers extends Modes with Adaptations with PatMatVirtualiser {
       }
     }
 
-    def typedImport(imp : Import) : Import = (transformed remove imp) match {
-      case Some(imp1: Import) => imp1
-      case None => log("unhandled import: "+imp+" in "+unit); imp
-    }
+    def typedImport(imp : Import) : Import =
+      if (settings.Yxnamer.value) imp
+      else (transformed remove imp) match {
+        case Some(imp1: Import) => imp1
+        case None => log("unhandled import: "+imp+" in "+unit); imp
+      }
+
     private def isWarnablePureExpression(tree: Tree) = tree match {
       case EmptyTree | Literal(Constant(())) => false
       case _                                 =>
@@ -2374,10 +2378,12 @@ trait Typers extends Modes with Adaptations with PatMatVirtualiser {
 
     def typedStats(stats: List[Tree], exprOwner: Symbol): List[Tree] = {
       val inBlock = exprOwner == context.owner
+      val scope = if (inBlock) context.scope else context.owner.info.decls
       def includesTargetPos(tree: Tree) =
         tree.pos.isRange && context.unit.exists && (tree.pos includes context.unit.targetPos)
       val localTarget = stats exists includesTargetPos
-      val statsErrors = scala.collection.mutable.LinkedHashSet[AbsTypeError]()
+      //val statsErrors = scala.collection.mutable.LinkedHashSet[AbsTypeError]()
+
       def typedStat(stat: Tree): Tree = {
         if (context.owner.isRefinementClass && !treeInfo.isDeclarationOrTypeDef(stat))
           OnlyDeclarationsError(stat)
@@ -2394,7 +2400,7 @@ trait Typers extends Modes with Adaptations with PatMatVirtualiser {
                 stat
               } else {
                 val localTyper = if (inBlock || (stat.isDef && !stat.isInstanceOf[LabelDef])) {
-                  context.flushBuffer()
+                  //context.flushBuffer()
                   this
                 } else newTyper(context.make(stat, exprOwner))
                 // XXX this creates a spurious dead code warning if an exception is thrown
@@ -2411,98 +2417,73 @@ trait Typers extends Modes with Adaptations with PatMatVirtualiser {
                   "a pure expression does nothing in statement position; " +
                   "you may be omitting necessary parentheses"
                 )
-                statsErrors ++= localTyper.context.errBuffer
+                //statsErrors ++= localTyper.context.errBuffer
                 result
               }
           }
       }
 
-      /** 'accessor' and 'accessed' are so similar it becomes very difficult to
-       *  follow the logic, so I renamed one to something distinct.
-       */
-      def accesses(looker: Symbol, accessed: Symbol) = accessed.hasLocalFlag && (
+      def checkNoDoubleDefs(): Unit = {
+        def accesses(looker: Symbol, accessed: Symbol) = accessed.hasLocalFlag && (
            (accessed.isParamAccessor)
-        || (looker.hasAccessorFlag && !accessed.hasAccessorFlag && accessed.isPrivate)
-      )
+           || (looker.hasAccessorFlag && !accessed.hasAccessorFlag && accessed.isPrivate)
+        )
+        var e = scope.elems
+        while ((e ne null) && e.owner == scope) {
+          var e1 = scope.lookupNextEntry(e)
+          while ((e1 ne null) && e1.owner == scope) {
+            if (!accesses(e.sym, e1.sym) && !accesses(e1.sym, e.sym) &&
+                (e.sym.isType || inBlock || (e.sym.tpe matches e1.sym.tpe)))
+              // default getters are defined twice when multiple overloads have defaults. an
+              // error for this is issued in RefChecks.checkDefaultsInOverloaded
+              if (!e.sym.isErroneous && !e1.sym.isErroneous && !e.sym.hasDefaultFlag &&
+                  !e.sym.hasAnnotation(BridgeClass) && !e1.sym.hasAnnotation(BridgeClass)) {
+                log("Double definition detected:\n  " +
+                    ((e.sym.getClass, e.sym.info, e.sym.ownerChain)) + "\n  " +
+                    ((e1.sym.getClass, e1.sym.info, e1.sym.ownerChain)))
 
-      def checkNoDoubleDefsAndAddSynthetics(stats: List[Tree]): List[Tree] = {
-        val scope = if (inBlock) context.scope else context.owner.info.decls
-        var newStats = new ListBuffer[Tree]
-        var needsCheck = true
-        var moreToAdd = true
-        while (moreToAdd) {
-          val initSize = scope.size
-          var e = scope.elems
-          while ((e ne null) && e.owner == scope) {
-
-            // check no double def
-            if (needsCheck) {
-              var e1 = scope.lookupNextEntry(e)
-              while ((e1 ne null) && e1.owner == scope) {
-                if (!accesses(e.sym, e1.sym) && !accesses(e1.sym, e.sym) &&
-                    (e.sym.isType || inBlock || (e.sym.tpe matches e1.sym.tpe) || e.sym.isMacro && e1.sym.isMacro))
-                  // default getters are defined twice when multiple overloads have defaults. an
-                  // error for this is issued in RefChecks.checkDefaultsInOverloaded
-                  if (!e.sym.isErroneous && !e1.sym.isErroneous && !e.sym.hasDefaultFlag &&
-                      !e.sym.hasAnnotation(BridgeClass) && !e1.sym.hasAnnotation(BridgeClass)) {
-                    log("Double definition detected:\n  " +
-                      ((e.sym.getClass, e.sym.info, e.sym.ownerChain)) + "\n  " +
-                      ((e1.sym.getClass, e1.sym.info, e1.sym.ownerChain)))
-
-                    DefDefinedTwiceError(e.sym, e1.sym)
-                    scope.unlink(e1) // need to unlink to avoid later problems with lub; see #2779
-                  }
-                e1 = scope.lookupNextEntry(e1)
+                DefDefinedTwiceError(e.sym, e1.sym)
+                scope.unlink(e1) // need to unlink to avoid later problems with lub; see #2779
               }
-            }
-
-          // add synthetics
-          context.unit.synthetics get e.sym foreach { tree =>
-            newStats += typedStat(tree) // might add even more synthetics to the scope
-            context.unit.synthetics -= e.sym
+              e1 = scope.lookupNextEntry(e1)
           }
-
           e = e.next
         }
-        needsCheck = false
-        // the type completer of a synthetic might add more synthetics. example: if the
-        // factory method of a case class (i.e. the constructor) has a default.
-        moreToAdd = initSize != scope.size
-        }
-        if (newStats.isEmpty) stats
-        else {
-          // put default getters next to the method they belong to,
-          // same for companion objects. fixes #2489 and #4036.
-          def matches(stat: Tree, synt: Tree) = (stat, synt) match {
-            case (DefDef(_, statName, _, _, _, _), DefDef(mods, syntName, _, _, _, _)) =>
-              mods.hasDefaultFlag && syntName.toString.startsWith(statName.toString)
-
-            case (ClassDef(_, className, _, _), ModuleDef(_, moduleName, _)) =>
-              className.toTermName == moduleName
-
-            case _ => false
-          }
-
-          def matching(stat: Tree): List[Tree] = {
-            val (pos, neg) = newStats.partition(synt => matches(stat, synt))
-            newStats = neg
-            pos.toList
-          }
-
-          (stats foldRight List[Tree]())((stat, res) => {
-            stat :: matching(stat) ::: res
-          }) ::: newStats.toList
-        }
       }
 
-      val stats1 = withSavedContext(context) {
-        val result = stats mapConserve typedStat
-        context.flushBuffer()
-        result
+      val newStats = new ListBuffer[Tree]
+
+      def processStat(sym: Symbol, oldstat: Tree = EmptyTree): Unit = {
+        sym.initialize
+        val (newstat, dependent) = context.unit.lateDefs.remove(sym)
+        if (newstat != EmptyTree) { log("processStat new " + sym + " " + newstat); newStats += typedStat(newstat) }
+        else if (oldstat != EmptyTree) { log("processStat old " + sym + " " + newstat); newStats += typedStat(oldstat) }
+        for (dep <- dependent) processStat(dep)
       }
-      context.updateBuffer(statsErrors)
-      if (phase.erasedTypes) stats1
-      else checkNoDoubleDefsAndAddSynthetics(stats1)
+
+      for (stat <- stats)
+        processStat(if (stat.isDef) stat.symbol else NoSymbol, stat)
+
+      if (!phase.erasedTypes && !context.owner.isPackageClass) {
+        // there are two reasons for excluding package members from
+        // double def checking and sythetics generation
+        // (1) since package scopes tend to be large, this could speed up things
+        // (2) package members can be visited many times during type checking
+        // This means that a companion object might be inserted far form its companion
+        // class by travsering synthetic late bound members. But we want to
+        // wait for the companion class to be generated so that the companion object
+        // is generated next to it.
+        checkNoDoubleDefs()
+        var moreToAdd = true
+        while (moreToAdd) {
+          val initElems = scope.elems
+          for (sym <- scope) processStat(sym)
+          // the type completer of a synthetic might add more synthetics. example: if the
+          // factory method of a case class (i.e. the constructor) has a default.
+          moreToAdd = scope.elems ne initElems
+        }
+      }
+      if (stats == newStats) stats else newStats.toList
     }
 
     def typedArg(arg: Tree, mode: Int, newmode: Int, pt: Type): Tree = {
@@ -4866,13 +4847,27 @@ trait Typers extends Modes with Adaptations with PatMatVirtualiser {
 
     def typedTypeConstructor(tree: Tree): Tree = typedTypeConstructor(tree, NOmode)
 
+    def packedTyped(tree: Tree, pt: Type): (Tree, Type) = {
+      var tree1 = typed(tree, pt)
+      if (!settings.Yxnamer.value) transformed(tree) = tree1
+      val tpe = packedType(tree1, context.owner)
+      (tree1, tpe)
+    }
+/*
     def computeType(tree: Tree, pt: Type): Type = {
       val tree1 = typed(tree, pt)
       transformed(tree) = tree1
       packedType(tree1, context.owner)
     }
+*/
+    def typedRhs(tree: ValOrDefDef, mode: Int, pt: Type): Tree =
+      if (settings.Yxnamer.value) // new scheme
+      	if (tree.symbol hasFlag INFERRED) { tree.symbol resetFlag INFERRED; tree.rhs }
+      	else typed(tree.rhs, mode, pt)
+      else
+        transformedOrTyped(tree.rhs, mode, pt)
 
-    def transformedOrTyped(tree: Tree, mode: Int, pt: Type): Tree = transformed.get(tree) match {
+    private def transformedOrTyped(tree: Tree, mode: Int, pt: Type): Tree = transformed.get(tree) match {
       case Some(tree1) => transformed -= tree; tree1
       case None => typed(tree, mode, pt)
     }
