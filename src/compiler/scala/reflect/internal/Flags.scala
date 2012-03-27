@@ -60,8 +60,8 @@ import scala.collection.{ mutable, immutable }
 // 42:         VBRIDGE
 // 43:         VARARGS
 // 44:    TRIEDCOOKING
-// 45:
-// 46:
+// 45:     SYNCHONIZED
+// 46:    TRANS_FLAG_2
 // 47:
 // 48:
 // 49:
@@ -166,6 +166,8 @@ class Flags extends ModifierFlags {
                                             // A Java method's type is ``cooked'' by transforming raw types to existentials
 
   final val SYNCHRONIZED  = 0x200000000000L // symbol is a method which should be marked ACC_SYNCHRONIZED
+  final val TRANS_FLAG_2  = 0x400000000000L // another transient flag guaranteed to be reset after each phase.
+
   // ------- shift definitions -------------------------------------------------------
 
   final val InitialFlags  = 0x0001FFFFFFFFFFFFL // flags that are enabled from phase 1.
@@ -386,7 +388,7 @@ class Flags extends ModifierFlags {
     case             VARARGS => "<varargs>"                           // (1L << 43)
     case        TRIEDCOOKING => "<triedcooking>"                      // (1L << 44)
     case        SYNCHRONIZED => "<synchronized>"                      // (1L << 45)
-    case     0x400000000000L => ""                                    // (1L << 46)
+    case        TRANS_FLAG_2 => "<trans_flag_2>"                      // (1L << 46)
     case     0x800000000000L => ""                                    // (1L << 47)
     case    0x1000000000000L => ""                                    // (1L << 48)
     case    0x2000000000000L => ""                                    // (1L << 49)

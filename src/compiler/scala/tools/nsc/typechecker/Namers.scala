@@ -235,6 +235,7 @@ trait Namers extends MethodSynthesis {
           scope unlink prev.sym // let them co-exist...
           // FIXME: The comment "let them co-exist" is confusing given that the
           // line it comments unlinks one of them.  What does it intend?
+          // [Martin] Unlinking does not mean that the symbol goes away.
         }
       }
       scope enter sym
@@ -808,15 +809,26 @@ trait Namers extends MethodSynthesis {
       else if (!sym.isFinal) tpe1
       else tpe
     }
+
     /** Computes the type of the body in a ValDef or DefDef, and
-     *  assigns the type to the tpt's node.  Returns the type.
+     *  assigns the type to the tpt's node. lateDef.enters the definition with the transformed
+     *  rhs for later integration during type checking.
+     *  Returns the type.
      */
-    private def assignTypeToTree(tree: ValOrDefDef, defnTyper: Typer, pt: Type): Type = {
+    private def assignTypeToTree[T <: ValOrDefDef]
+                                (tree: T, defnTyper: Typer, pt: Type, copier: (T, Tree) => Tree): Type = {
       // compute result type from rhs
-      val typedBody = defnTyper.computeType(tree.rhs, pt)
-      val sym       = if (owner.isMethod) owner else tree.symbol
-      val typedDefn = widenIfNecessary(sym, typedBody, pt)
-      assignTypeToTree(tree, typedDefn)
+      val (rhs1, rhsType) = defnTyper.packedTyped(tree.rhs, pt)
+      val sym = if (owner.isMethod) owner else tree.symbol
+      val defnType = widenIfNecessary(sym, rhsType, pt)
+      if (settings.Yxnamer.value) {
+      	val tree1 = copier(tree, rhs1).asInstanceOf[ValOrDefDef]
+      	context.unit.lateDefs.enter(tree1)
+      	tree.symbol setFlag INFERRED
+      	//println("infer: "+tree1)
+      	assignTypeToTree(tree1, defnType)
+      } else
+      	assignTypeToTree(tree, defnType)
     }
 
     private def assignTypeToTree(tree: ValOrDefDef, tpe: Type): Type = {
@@ -1045,7 +1057,8 @@ trait Namers extends MethodSynthesis {
             // replace deSkolemized symbols with skolemized ones
             // (for resultPt computed by looking at overridden symbol, right?)
             val pt = resultPt.substSym(tparamSyms, tparams map (_.symbol))
-            assignTypeToTree(ddef, typer, pt)
+            assignTypeToTree(ddef, typer, pt,
+                treeCopy.DefDef(_: DefDef, ddef.mods, ddef.name, ddef.tparams, ddef.vparamss, ddef.tpt, _))
           }
         )
         // #2382: return type of default getters are always @uncheckedVariance
@@ -1308,7 +1321,8 @@ trait Namers extends MethodSynthesis {
               MissingParameterOrValTypeError(tpt)
               ErrorType
             }
-            else assignTypeToTree(vdef, newTyper(typer1.context.make(vdef, sym)), WildcardType)
+            else assignTypeToTree(vdef, newTyper(typer1.context.make(vdef, sym)), WildcardType,
+                treeCopy.ValDef(_: ValDef, vdef.mods, vdef.name, vdef.tpt, _))
           }
           else typer1.typedType(tpt).tpe
 
@@ -1321,9 +1335,10 @@ trait Namers extends MethodSynthesis {
           if (expr1.symbol != null && expr1.symbol.isRootPackage)
             RootImportError(tree)
 
-          val newImport = treeCopy.Import(tree, expr1, selectors).asInstanceOf[Import]
+          val newImport = treeCopy.Import(tree, expr1, selectors)
           checkSelectors(newImport)
-          transformed(tree) = newImport
+          if (settings.Yxnamer.value) context.unit.lateDefs.enter(newImport)
+          else transformed(tree) = newImport
           // copy symbol and type attributes back into old expression
           // so that the structure builder will find it.
           expr.symbol = expr1.symbol

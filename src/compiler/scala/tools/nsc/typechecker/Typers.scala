@@ -39,6 +39,7 @@ trait Typers extends Modes with Adaptations with PatMatVirtualiser {
   // namer calls typer.computeType(rhs) on DefDef / ValDef when tpt is empty. the result
   // is cached here and re-used in typedDefDef / typedValDef
   // Also used to cache imports type-checked by namer.
+  // Used only if -Yxnamer is not set
   val transformed = new mutable.HashMap[Tree, Tree]
 
   final val shortenImports = false
@@ -48,7 +49,7 @@ trait Typers extends Modes with Adaptations with PatMatVirtualiser {
     resetContexts()
     resetNamer()
     resetImplicits()
-    transformed.clear()
+    if (!settings.Yxnamer.value) transformed.clear()
   }
 
   object UnTyper extends Traverser {
@@ -1700,7 +1701,7 @@ trait Typers extends Modes with Adaptations with PatMatVirtualiser {
             LocalVarUninitializedError(vdef)
           vdef.rhs
         } else {
-          val tpt2 = if (sym.hasDefault) {
+          val pt1 = if (sym.hasDefault) {
             // When typechecking default parameter, replace all type parameters in the expected type by Wildcard.
             // This allows defining "def foo[T](a: T = 1)"
             val tparams = sym.owner.skipConstructor.info.typeParams
@@ -1716,7 +1717,7 @@ trait Typers extends Modes with Adaptations with PatMatVirtualiser {
               else subst(tpt1.tpe.typeArgs(0))
             else subst(tpt1.tpe)
           } else tpt1.tpe
-          newTyper(typer1.context.make(vdef, sym)).transformedOrTyped(vdef.rhs, EXPRmode | BYVALmode, tpt2)
+          newTyper(typer1.context.make(vdef, sym)).typedRhs(vdef, EXPRmode | BYVALmode, pt1)
         }
       treeCopy.ValDef(vdef, typedMods, vdef.name, tpt1, checkDead(rhs1)) setType NoType
     }
@@ -1904,7 +1905,7 @@ trait Typers extends Modes with Adaptations with PatMatVirtualiser {
         } else if (meth.isMacro) {
           EmptyTree
         } else {
-          transformedOrTyped(ddef.rhs, EXPRmode, tpt1.tpe)
+          typedRhs(ddef, EXPRmode, tpt1.tpe)
         }
 
         if (meth.isPrimaryConstructor && meth.isClassConstructor && !isPastTyper && !reporter.hasErrors && !meth.owner.isSubClass(AnyValClass)) {
@@ -2344,10 +2345,13 @@ trait Typers extends Modes with Adaptations with PatMatVirtualiser {
       }
     }
 
-    def typedImport(imp : Import) : Import = (transformed remove imp) match {
-      case Some(imp1: Import) => imp1
-      case None => log("unhandled import: "+imp+" in "+unit); imp
-    }
+    def typedImport(imp : Import) : Import =
+      if (settings.Yxnamer.value) imp
+      else (transformed remove imp) match {
+        case Some(imp1: Import) => imp1
+        case None => log("unhandled import: "+imp+" in "+unit); imp
+      }
+
     private def isWarnablePureExpression(tree: Tree) = tree match {
       case EmptyTree | Literal(Constant(())) => false
       case _                                 =>
@@ -4831,18 +4835,27 @@ trait Typers extends Modes with Adaptations with PatMatVirtualiser {
 
     def typedTypeConstructor(tree: Tree): Tree = typedTypeConstructor(tree, NOmode)
 
-    def typeAndPack(tree: Tree, pt: Type): Type = {
-      val tree1 = typed(tree, pt)
-      packedType(tree1, context.owner)
+    def packedTyped(tree: Tree, pt: Type): (Tree, Type) = {
+      var tree1 = typed(tree, pt)
+      if (!settings.Yxnamer.value) transformed(tree) = tree1
+      val tpe = packedType(tree1, context.owner)
+      (tree1, tpe)
     }
-
+/*
     def computeType(tree: Tree, pt: Type): Type = {
       val tree1 = typed(tree, pt)
       transformed(tree) = tree1
       packedType(tree1, context.owner)
     }
+*/
+    def typedRhs(tree: ValOrDefDef, mode: Int, pt: Type): Tree =
+      if (settings.Yxnamer.value) // new scheme
+      	if (tree.symbol hasFlag INFERRED) { tree.symbol resetFlag INFERRED; tree.rhs }
+      	else typed(tree.rhs, mode, pt)
+      else
+        transformedOrTyped(tree.rhs, mode, pt)
 
-    def transformedOrTyped(tree: Tree, mode: Int, pt: Type): Tree = transformed.get(tree) match {
+    private def transformedOrTyped(tree: Tree, mode: Int, pt: Type): Tree = transformed.get(tree) match {
       case Some(tree1) => transformed -= tree; tree1
       case None => typed(tree, mode, pt)
     }
