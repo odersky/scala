@@ -35,7 +35,7 @@ class Template(universe: doc.Universe, tpl: DocTemplateEntity) extends HtmlPage 
     </xml:group>
 
   val valueMembers =
-    tpl.methods.filterNot(_.isBridge) ++ tpl.values ++ tpl.templates.filter(x => x.isObject || x.isPackage) sorted
+    tpl.methods ++ tpl.values ++ tpl.templates.filter(x => x.isObject || x.isPackage) sorted
 
   val (absValueMembers, nonAbsValueMembers) =
     valueMembers partition (_.isAbstract)
@@ -389,7 +389,7 @@ class Template(universe: doc.Universe, tpl: DocTemplateEntity) extends HtmlPage 
       case dtpl: DocTemplateEntity if (isSelf && dtpl.sourceUrl.isDefined && dtpl.inSource.isDefined && !isReduced) =>
         val (absFile, line) = dtpl.inSource.get
         <dt>Source</dt>
-        <dd>{ <a href={ dtpl.sourceUrl.get.toString }>{ Text(absFile.file.getName) }</a> }</dd>
+        <dd>{ <a href={ dtpl.sourceUrl.get.toString } target="_blank">{ Text(absFile.file.getName) }</a> }</dd>
       case _ => NodeSeq.Empty
     }
 
