@@ -252,7 +252,9 @@ trait Namers extends MethodSynthesis {
           case tree @ ValDef(_, _, _, _)                     => enterValDef(tree)
           case tree @ DefDef(_, _, _, _, _, _)               => enterDefDef(tree)
           case tree @ TypeDef(_, _, _, _)                    => enterTypeDef(tree)
-          case DocDef(_, defn)                               => enterSym(defn)
+          case DocDef(doc, defn)                               =>
+            enterSym(defn)
+            context.unit.lateDefs.enterWrapper(defn.symbol, treeCopy.DocDef(tree, doc, _))
           case tree @ Import(_, _)                           =>
             assignSymbol(tree)
             returnContext = context.makeNewImport(tree)
@@ -693,7 +695,7 @@ trait Namers extends MethodSynthesis {
 
    def enterLateDef(tree: Tree, original: Symbol = NoSymbol): Symbol = {
       enterSym(tree)
-      context.unit.lateDefs.enter(tree, original)
+      context.unit.lateDefs.enterTree(tree, original)
       log("enter late "+tree.symbol+" from "+original)
       tree.symbol
     }
@@ -816,20 +818,16 @@ trait Namers extends MethodSynthesis {
      *  rhs for later integration during type checking.
      *  Returns the type.
      */
-    private def assignTypeToTree[T <: ValOrDefDef]
-                                (tree: T, defnTyper: Typer, pt: Type, copier: (T, Tree) => Tree): Type = {
+    private def inferTypeOfTree[T <: ValOrDefDef]
+                               (tree: T, defnTyper: Typer, pt: Type, copier: (Tree, Tree) => Tree): Type = {
       // compute result type from rhs
       val (rhs1, rhsType) = defnTyper.packedTyped(tree.rhs, pt)
-      val sym = if (owner.isMethod) owner else tree.symbol
-      val defnType = widenIfNecessary(sym, rhsType, pt)
-      if (xNamer) {
-      	val tree1 = copier(tree, rhs1).asInstanceOf[ValOrDefDef]
-      	context.unit.lateDefs.enter(tree1)
-      	tree.symbol setFlag INFERRED
-      	//println("infer: "+tree1)
-      	assignTypeToTree(tree1, defnType)
-      } else
-      	assignTypeToTree(tree, defnType)
+      val defnType = widenIfNecessary(if (owner.isMethod) owner else tree.symbol, rhsType, pt)
+      assignTypeToTree(tree, defnType)
+      context.unit.lateDefs.enterWrapper(tree.symbol, copier(_, rhs1))
+      tree.symbol setFlag INFERRED
+      defnType
+      //println("infer: "+tree1)
     }
 
     private def assignTypeToTree(tree: ValOrDefDef, tpe: Type): Type = {
@@ -1058,8 +1056,8 @@ trait Namers extends MethodSynthesis {
             // replace deSkolemized symbols with skolemized ones
             // (for resultPt computed by looking at overridden symbol, right?)
             val pt = resultPt.substSym(tparamSyms, tparams map (_.symbol))
-            assignTypeToTree(ddef, typer, pt,
-                treeCopy.DefDef(_: DefDef, ddef.mods, ddef.name, ddef.tparams, ddef.vparamss, ddef.tpt, _))
+            inferTypeOfTree(ddef, typer, pt,
+                treeCopy.DefDef(_, ddef.mods, ddef.name, ddef.tparams, ddef.vparamss, ddef.tpt, _))
           }
         )
         // #2382: return type of default getters are always @uncheckedVariance
@@ -1322,8 +1320,8 @@ trait Namers extends MethodSynthesis {
               MissingParameterOrValTypeError(tpt)
               ErrorType
             }
-            else assignTypeToTree(vdef, newTyper(typer1.context.make(vdef, sym)), WildcardType,
-                treeCopy.ValDef(_: ValDef, vdef.mods, vdef.name, vdef.tpt, _))
+            else inferTypeOfTree(vdef, newTyper(typer1.context.make(vdef, sym)), WildcardType,
+                treeCopy.ValDef(_, vdef.mods, vdef.name, vdef.tpt, _))
           }
           else typer1.typedType(tpt).tpe
 
@@ -1338,8 +1336,7 @@ trait Namers extends MethodSynthesis {
 
           val newImport = treeCopy.Import(tree, expr1, selectors)
           checkSelectors(newImport)
-          if (xNamer) context.unit.lateDefs.enter(newImport)
-          else transformed(tree) = newImport
+          context.unit.lateDefs.enterTree(newImport)
           // copy symbol and type attributes back into old expression
           // so that the structure builder will find it.
           expr.symbol = expr1.symbol

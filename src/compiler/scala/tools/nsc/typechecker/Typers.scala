@@ -40,7 +40,7 @@ trait Typers extends Modes with Adaptations with PatMatVirtualiser {
   // is cached here and re-used in typedDefDef / typedValDef
   // Also used to cache imports type-checked by namer.
   // Used only if -Yxnamer is not set
-  val transformed = new mutable.HashMap[Tree, Tree]
+  // val transformed = new mutable.HashMap[Tree, Tree]
 
   final val shortenImports = false
 
@@ -49,7 +49,6 @@ trait Typers extends Modes with Adaptations with PatMatVirtualiser {
     resetContexts()
     resetNamer()
     resetImplicits()
-    if (!xNamer) transformed.clear()
   }
 
   object UnTyper extends Traverser {
@@ -2357,12 +2356,7 @@ trait Typers extends Modes with Adaptations with PatMatVirtualiser {
       }
     }
 
-    def typedImport(imp : Import) : Import =
-      if (xNamer) imp
-      else (transformed remove imp) match {
-        case Some(imp1: Import) => imp1
-        case None => log("unhandled import: "+imp+" in "+unit); imp
-      }
+    def typedImport(imp : Import) : Import = imp
 
     private def isWarnablePureExpression(tree: Tree) = tree match {
       case EmptyTree | Literal(Constant(())) => false
@@ -2460,9 +2454,12 @@ trait Typers extends Modes with Adaptations with PatMatVirtualiser {
 
       def processStat(sym: Symbol, oldstat: Tree = EmptyTree): Unit = {
         sym.initialize
-        val (newstat, dependent) = context.unit.lateDefs.remove(sym)
-        if (newstat != EmptyTree) { log("processStat new " + sym + " " + newstat); newStats += typedStat(newstat) }
-        else if (oldstat != EmptyTree) { log("processStat old " + sym + " " + newstat); newStats += typedStat(oldstat) }
+        val (latedef, dependent) = context.unit.lateDefs.remove(sym)
+        val newstat = latedef trans oldstat
+        if (newstat != EmptyTree) {
+          log("processStat "+(if (newstat == oldstat) "old " else "new ")+sym+" "+newstat)
+          newStats += typedStat(newstat)
+        }
         for (dep <- dependent) processStat(dep)
       }
 
@@ -4855,7 +4852,6 @@ trait Typers extends Modes with Adaptations with PatMatVirtualiser {
 
     def packedTyped(tree: Tree, pt: Type): (Tree, Type) = {
       var tree1 = typed(tree, pt)
-      if (!xNamer) transformed(tree) = tree1
       val tpe = packedType(tree1, context.owner)
       (tree1, tpe)
     }
@@ -4867,18 +4863,10 @@ trait Typers extends Modes with Adaptations with PatMatVirtualiser {
     }
 */
     def typedRhs(tree: ValOrDefDef, mode: Int, pt: Type): Tree =
-      if (xNamer) // new scheme
-      	if (tree.symbol hasFlag INFERRED) { tree.symbol resetFlag INFERRED; tree.rhs }
-      	else typed(tree.rhs, mode, pt)
-      else
-        transformedOrTyped(tree.rhs, mode, pt)
+      if (tree.symbol hasFlag INFERRED) { tree.symbol resetFlag INFERRED; tree.rhs }
+      else typed(tree.rhs, mode, pt)
 
-    private def transformedOrTyped(tree: Tree, mode: Int, pt: Type): Tree = transformed.get(tree) match {
-      case Some(tree1) => transformed -= tree; tree1
-      case None => typed(tree, mode, pt)
-    }
-
-    def findManifest(tp: Type, full: Boolean) = beforeTyper {
+   def findManifest(tp: Type, full: Boolean) = beforeTyper {
       inferImplicit(
         EmptyTree,
         appliedType((if (full) FullManifestClass else PartialManifestClass).typeConstructor, List(tp)),

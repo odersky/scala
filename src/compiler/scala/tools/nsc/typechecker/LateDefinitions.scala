@@ -16,7 +16,7 @@ trait LateDefinitions { self: Global =>
    */
   class LateDefs {
     /** Maps symbols to the late trees that define them */
-    private val lateDefs = mutable.Map[Symbol, Tree]()
+    private val lateDefs = mutable.Map[Symbol, LateDef]()
 
     /** Maps symbols to the symbols that depend on them (e.g. field -> getter/setter,
      *  method -> default argument, class -> companion object) */
@@ -37,18 +37,31 @@ trait LateDefinitions { self: Global =>
      *                  Dependent definitions will be inserted after their original definitions.
      *                  Original symbols that do not share the same owner with the tree's symbol are ignored.
      */
-    def enter(tree: Tree, original: Symbol = NoSymbol): Unit = {
-      assert(tree.symbol != NoSymbol)
-      lateDefs(tree.symbol) = tree
+    def enterTree(tree: Tree, original: Symbol = NoSymbol): Unit = {
+      lateDefs(tree.symbol) = new ConstantLateDef(tree)
       if (original != NoSymbol && original.owner == tree.symbol.owner) {
         dependentSymbols(original) :+= tree.symbol
       }
     }
 
+    def enterWrapper(sym: Symbol, trans: Tree => Tree): Unit =
+      lateDefs(sym) = new LateDef(
+        lateDefs get sym match {
+          case Some(ldef) => ldef.trans andThen trans
+          case None => trans
+        }
+      )
+
     /** Remove symbol from maps, and return its associated tree and dependent symbols */
-    def remove(sym: Symbol): (Tree, List[Symbol]) =
-      (lateDefs remove sym getOrElse EmptyTree, dependentSymbols remove sym getOrElse Nil)
+    def remove(sym: Symbol): (LateDef, List[Symbol]) =
+      (lateDefs remove sym getOrElse NoLateDef, dependentSymbols remove sym getOrElse Nil)
 
   }
+
+  class LateDef(val trans: Tree => Tree)
+
+  class ConstantLateDef(tree: Tree) extends LateDef(scala.Function.const(tree)(_))
+
+  val NoLateDef = new LateDef(identity)
 
 }
