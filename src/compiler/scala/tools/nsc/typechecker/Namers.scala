@@ -230,6 +230,7 @@ trait Namers extends MethodSynthesis {
       if (!allowsOverload(sym)) {
         val prev = scope.lookupEntry(sym.name)
         if ((prev ne null) && prev.owner == scope && conflict(sym, prev.sym)) {
+          if (settings.debug.value) println("conflict "+sym.name+"#"+sym.id+"#"+prev.sym.id+" "+flagsToString(sym.flags)+" "+flagsToString(prev.sym.flags))
           DoubleDefError(sym, prev.sym)
           sym setInfo ErrorType
           scope unlink prev.sym // let them co-exist...
@@ -821,7 +822,7 @@ trait Namers extends MethodSynthesis {
       val (rhs1, rhsType) = defnTyper.packedTyped(tree.rhs, pt)
       val sym = if (owner.isMethod) owner else tree.symbol
       val defnType = widenIfNecessary(sym, rhsType, pt)
-      if (settings.Yxnamer.value) {
+      if (xNamer) {
       	val tree1 = copier(tree, rhs1).asInstanceOf[ValOrDefDef]
       	context.unit.lateDefs.enter(tree1)
       	tree.symbol setFlag INFERRED
@@ -1337,7 +1338,7 @@ trait Namers extends MethodSynthesis {
 
           val newImport = treeCopy.Import(tree, expr1, selectors)
           checkSelectors(newImport)
-          if (settings.Yxnamer.value) context.unit.lateDefs.enter(newImport)
+          if (xNamer) context.unit.lateDefs.enter(newImport)
           else transformed(tree) = newImport
           // copy symbol and type attributes back into old expression
           // so that the structure builder will find it.

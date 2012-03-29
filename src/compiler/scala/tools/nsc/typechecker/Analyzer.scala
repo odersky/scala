@@ -28,6 +28,8 @@ trait Analyzer extends AnyRef
   val global : Global
   import global._
 
+  val xNamer = true // settings.Yxnamer.value
+
   object namerFactory extends SubComponent {
     val global: Analyzer.this.global.type = Analyzer.this.global
     val phaseName = "namer"

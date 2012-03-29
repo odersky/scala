@@ -225,7 +225,7 @@ trait Trees { self: Universe =>
     /** If this tree is not an EmptyTree, return it, otherwise
      * return `that`
      */
-    def orElse(that: => Tree) = 
+    @inline final def orElse(that: => Tree) = 
       if (this == EmptyTree) that else this
 
     /** Make a copy of this tree, keeping all attributes,

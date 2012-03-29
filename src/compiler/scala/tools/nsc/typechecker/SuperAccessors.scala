@@ -63,7 +63,7 @@ abstract class SuperAccessors extends transform.Transform with transform.TypingT
         storeAccessorDefinition(clazz, DefDef(acc, EmptyTree))
         acc
       }
-      
+
       atPos(sel.pos)(Select(gen.mkAttributedThis(clazz), superAcc) setType sel.tpe)
     }
 
@@ -140,7 +140,8 @@ abstract class SuperAccessors extends transform.Transform with transform.TypingT
     override def transform(tree: Tree): Tree = {
       val sym = tree.symbol
 
-      def mayNeedProtectedAccessor(sel: Select, args: List[Tree], goToSuper: Boolean) =
+      def mayNeedProtectedAccessor(sel: Select, args: List[Tree], goToSuper: Boolean) = {
+        if (sym == NoSymbol) println("!!!NOSYM!!!" + tree)
         if (needsProtectedAccessor(sym, tree.pos)) {
           debuglog("Adding protected accessor for " + tree)
 
@@ -148,6 +149,7 @@ abstract class SuperAccessors extends transform.Transform with transform.TypingT
         }
         else if (goToSuper) super.transform(tree)
         else tree
+      }
 
       try tree match {
         // Don't transform patterns or strange trees will reach the matcher (ticket #4062)
@@ -242,7 +244,7 @@ abstract class SuperAccessors extends transform.Transform with transform.TypingT
             // FIXME - this should be unified with needsProtectedAccessor, but some
             // subtlety which presently eludes me is foiling my attempts.
             val shouldEnsureAccessor = (
-                 currentClass.isTrait 
+                 currentClass.isTrait
               && sym.isProtected
               && sym.enclClass != currentClass
               && !sym.owner.isTrait
@@ -461,7 +463,7 @@ abstract class SuperAccessors extends transform.Transform with transform.TypingT
           )
         true
       }
-      isCandidate && !host.isPackageClass && !isSelfType 
+      isCandidate && !host.isPackageClass && !isSelfType
     }
 
     /** Return the innermost enclosing class C of referencingClass for which either

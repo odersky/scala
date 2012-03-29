@@ -49,7 +49,7 @@ trait Typers extends Modes with Adaptations with PatMatVirtualiser {
     resetContexts()
     resetNamer()
     resetImplicits()
-    if (!settings.Yxnamer.value) transformed.clear()
+    if (!xNamer) transformed.clear()
   }
 
   object UnTyper extends Traverser {
@@ -2346,7 +2346,7 @@ trait Typers extends Modes with Adaptations with PatMatVirtualiser {
     }
 
     def typedImport(imp : Import) : Import =
-      if (settings.Yxnamer.value) imp
+      if (xNamer) imp
       else (transformed remove imp) match {
         case Some(imp1: Import) => imp1
         case None => log("unhandled import: "+imp+" in "+unit); imp
@@ -2381,6 +2381,11 @@ trait Typers extends Modes with Adaptations with PatMatVirtualiser {
               context = context.makeNewImport(imp)
               imp.symbol.initialize
               typedImport(imp)
+            case ValDef(mods, name, tpt, rhs) if (stat.symbol.flags & PrivateLocal) != (mods.flags & PrivateLocal) =>
+              // todo: make field generation enterLate the new node.
+              //  once getters and setters are under the new scheme this case can be removed.
+              typedStat(treeCopy.ValDef(
+                stat, mods &~ PrivateLocal | (stat.symbol.flags & PrivateLocal), stat.symbol.name, tpt, rhs))
             case _ =>
               if (localTarget && !includesTargetPos(stat)) {
                 // skip typechecking of statements in a sequence where some other statement includes
@@ -2449,8 +2454,9 @@ trait Typers extends Modes with Adaptations with PatMatVirtualiser {
         for (dep <- dependent) processStat(dep)
       }
 
-      for (stat <- stats)
-        processStat(if (stat.isDef) stat.symbol else NoSymbol, stat)
+      for (stat <- stats) {
+        processStat(if (stat.isDef || stat.isInstanceOf[Import]) stat.symbol else NoSymbol, stat)
+      }
 
       if (!phase.erasedTypes && !context.owner.isPackageClass) {
         // there are two reasons for excluding package members from
@@ -4837,7 +4843,7 @@ trait Typers extends Modes with Adaptations with PatMatVirtualiser {
 
     def packedTyped(tree: Tree, pt: Type): (Tree, Type) = {
       var tree1 = typed(tree, pt)
-      if (!settings.Yxnamer.value) transformed(tree) = tree1
+      if (!xNamer) transformed(tree) = tree1
       val tpe = packedType(tree1, context.owner)
       (tree1, tpe)
     }
@@ -4849,7 +4855,7 @@ trait Typers extends Modes with Adaptations with PatMatVirtualiser {
     }
 */
     def typedRhs(tree: ValOrDefDef, mode: Int, pt: Type): Tree =
-      if (settings.Yxnamer.value) // new scheme
+      if (xNamer) // new scheme
       	if (tree.symbol hasFlag INFERRED) { tree.symbol resetFlag INFERRED; tree.rhs }
       	else typed(tree.rhs, mode, pt)
       else
