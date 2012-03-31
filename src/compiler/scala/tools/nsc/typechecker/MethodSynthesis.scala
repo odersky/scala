@@ -167,7 +167,7 @@ trait MethodSynthesis {
    *   part of the typed template.
    */
   trait MethodSynth {
-    self: Namer =>
+    self: NormalNamer =>
 
     import NamerErrorGen._
 

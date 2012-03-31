@@ -37,8 +37,8 @@ trait LateDefinitions { self: Global =>
      *                  Dependent definitions will be inserted after their original definitions.
      *                  Original symbols that do not share the same owner with the tree's symbol are ignored.
      */
-    def enterTree(tree: Tree, original: Symbol = NoSymbol): Unit = {
-      lateDefs(tree.symbol) = new ConstantLateDef(tree)
+    def enterTree(tree: Tree, original: Symbol = NoSymbol, postProcess: Tree => Tree = identity): Unit = {
+      lateDefs(tree.symbol) = new LateDef(t => postProcess(tree))
       if (original != NoSymbol && original.owner == tree.symbol.owner) {
         dependentSymbols(original) :+= tree.symbol
       }
@@ -59,8 +59,6 @@ trait LateDefinitions { self: Global =>
   }
 
   class LateDef(val trans: Tree => Tree)
-
-  class ConstantLateDef(tree: Tree) extends LateDef(scala.Function.const(tree)(_))
 
   val NoLateDef = new LateDef(identity)
 

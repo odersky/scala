@@ -865,6 +865,9 @@ trait Definitions extends reflect.api.StandardDefinitions {
     lazy val GetterTargetClass          = getMetaAnnotation("getter")
     lazy val ParamTargetClass           = getMetaAnnotation("param")
     lazy val SetterTargetClass          = getMetaAnnotation("setter")
+    lazy val ClassTargetClass           = getMetaAnnotation("companionClass")
+    lazy val ObjectTargetClass          = getMetaAnnotation("companionObject")
+    lazy val MethodTargetClass          = getMetaAnnotation("companionMethod")
     // TODO: module, moduleClass? package, packageObject?
 
     private def getMetaAnnotation(name: String) = getRequiredClass("scala.annotation.meta." + name)
@@ -941,7 +944,7 @@ trait Definitions extends reflect.api.StandardDefinitions {
         case result   => result
       }
     }
-    
+
     def packageExists(packageName: String): Boolean =
       getModuleIfDefined(packageName).isPackage
 

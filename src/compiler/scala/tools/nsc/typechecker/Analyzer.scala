@@ -13,6 +13,7 @@ import util.Statistics._
 trait Analyzer extends AnyRef
             with Contexts
             with Namers
+            with NewNamers
             with Typers
             with Infer
             with Implicits
@@ -28,7 +29,7 @@ trait Analyzer extends AnyRef
   val global : Global
   import global._
 
-  val xNamer = true // settings.Yxnamer.value
+  val xNamer = settings.Yxnamer.value
 
   object namerFactory extends SubComponent {
     val global: Analyzer.this.global.type = Analyzer.this.global
