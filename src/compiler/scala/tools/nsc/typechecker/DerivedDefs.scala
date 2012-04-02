@@ -14,15 +14,27 @@ trait Derivers { this: Analyzer =>
 
     import NamerErrorGen._
 
+    /** A helper class that simplifies the creation of definitions that are
+     *  in some way derived from an `original` definition.
+     *  The main value that needs to be defined in subclasses is `derivedTree`,
+     *  which returns the unattributed tree of the derived definition.
+     *  The main method called by clients of this class is `enterLateDef`,
+     *  which enters the definition into the typechecking process and
+     *  returns `derivedTree` with a symbol representing the definition.
+     */
     abstract class DefGen(original: MemberDef) {
 
-     /** The name of the derived method */
+      /** The name of the derived method */
       def name: TermName
 
       /** Which meta-annotation is associated with this kind of entity.
-       *  Presently one of: field, getter, setter, beanGetter, beanSetter, param.
+       *  Presently one of: field, getter, setter, beanGetter, beanSetter, param,
+       *  companionClass, companionObject, companionMethod.
        */
       def annotCategory: Symbol
+
+      /** Should annotations whose definitions are not meta-annotated be kept? */
+      def keepCleanAnnots: Boolean = false
 
       /** The flags that are retained from the original symbol */
       def flagsMask: Long
@@ -34,7 +46,7 @@ trait Derivers { this: Analyzer =>
       /** The flags of the derived definition; may be overridden in subclasses */
       def derivedFlags = original.mods.flags & flagsMask | flagsExtra
 
-      /** The modifiers of the derived defiition; may be overridden in subclasses */
+      /** The modifiers of the derived definition; may be overridden in subclasses */
       def derivedMods = Modifiers(derivedFlags, original.mods.privateWithin)
 
       /** The definition tree of the derived symbol.
@@ -60,9 +72,6 @@ trait Derivers { this: Analyzer =>
         derivedSym setAnnotations deriveAnnotations(original, annotCategory, keepCleanAnnots)
         logDerived(tree)
       }
-
-      /** Should annotations whose definitions are not meta-annotated be kept? */
-      def keepCleanAnnots: Boolean = false
 
       private def logDerived(result: Tree): Tree = {
        debuglog("[+derived] " + ojoin(result.symbol.accurateKindString, result.symbol.getterName.decode)
@@ -181,9 +190,9 @@ trait Derivers { this: Analyzer =>
             BeanPropertyAnnotationLimitationError(original)
         }
         override def validate() {
+          if (derivedSym.isOverloaded) GetterDefinedTwiceError(derivedSym)
           validateBeanAnnot(BeanPropertyAttr)
           validateBeanAnnot(BooleanBeanPropertyAttr)
-          if (derivedSym.isOverloaded) GetterDefinedTwiceError(derivedSym)
           super.validate()
         }
 
@@ -222,10 +231,7 @@ trait Derivers { this: Analyzer =>
         def name = nme.getterToSetter(getter.name)
         def annotCategory = SetterTargetClass
         val setterParam = ValDef(
-          Modifiers(PARAM),
-          setterParamName,
-          TypeTree(getter.symbol.tpe.finalResultType),
-          EmptyTree)
+          Modifiers(PARAM), setterParamName, TypeTree(getter.symbol.tpe.finalResultType), EmptyTree)
         lazy val derivedTree = atPos(original.pos.focus) {
           DefDef(derivedMods, name, Nil, List(List(setterParam)), TypeTree(UnitClass.tpe),
           if (original.mods.isDeferred) EmptyTree else initialization)
@@ -239,7 +245,7 @@ trait Derivers { this: Analyzer =>
         protected def prefix: String
         override def flagsMask  = BeanPropertyFlags
         override def flagsExtra = 0
-        override def name = newTermName(prefix+original.name.toString.capitalize)
+        override def name = newTermName(prefix + original.name.toString.capitalize)
       }
 
       class BeanGetterGen(val prefix: String) extends GetterGen with BeanGen {
