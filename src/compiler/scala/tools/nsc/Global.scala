@@ -12,7 +12,7 @@ import scala.tools.util.PathResolver
 import scala.collection.{ mutable, immutable }
 import io.{ SourceReader, AbstractFile, Path }
 import reporters.{ Reporter, ConsoleReporter }
-import util.{ NoPosition, Exceptional, ClassPath, SourceFile, NoSourceFile, Statistics, StatisticsInfo, BatchSourceFile, ScriptSourceFile, ScalaClassLoader, returning }
+import util.{ NoPosition, Exceptional, ClassPath, MergedClassPath, SourceFile, NoSourceFile, Statistics, StatisticsInfo, BatchSourceFile, ScriptSourceFile, ScalaClassLoader, returning }
 import scala.reflect.internal.pickling.{ PickleBuffer, PickleFormat }
 import settings.{ AestheticSettings }
 import symtab.{ Flags, SymbolTable, SymbolLoaders, SymbolTrackers }
@@ -73,6 +73,7 @@ class Global(var currentSettings: Settings, var reporter: Reporter) extends Symb
     else new { val global: Global.this.type = Global.this } with JavaPlatform
 
   type PlatformClassPath = ClassPath[platform.BinaryRepr]
+  type OptClassPath = Option[PlatformClassPath]
 
   def classPath: PlatformClassPath = platform.classPath
 
@@ -879,27 +880,38 @@ class Global(var currentSettings: Settings, var reporter: Reporter) extends Symb
    *    - a list of of packages that should have been invalidated but were not because
    *      they are system packages.
    */
-  def invalidateClassPathEntry(path: String): (List[ClassSymbol], List[ClassSymbol]) = {
+  def invalidateClassPathEntries(paths: String*): (List[ClassSymbol], List[ClassSymbol]) = {
     val invalidated, failed = new mutable.ListBuffer[ClassSymbol]
     classPath match {
-      case cp: util.MergedClassPath[_] =>
-        val dir = AbstractFile getDirectory path
-        val canonical = dir.canonicalPath
-        def matchesCanonical(e: ClassPath[_]) = e.origin match {
-          case Some(opath) =>
-            (AbstractFile getDirectory opath).canonicalPath == canonical
-          case None =>
-            false
+      case cp: MergedClassPath[_] =>
+        def assoc(path: String): List[(PlatformClassPath, PlatformClassPath)] = {
+          val dir = AbstractFile getDirectory path
+          val canonical = dir.canonicalPath
+          def matchesCanonical(e: ClassPath[_]) = e.origin match {
+            case Some(opath) =>
+              (AbstractFile getDirectory opath).canonicalPath == canonical
+            case None =>
+              false
+          }
+          cp.entries find matchesCanonical match {
+            case Some(oldEntry) =>
+              List(oldEntry -> cp.context.newClassPath(dir))
+            case None =>
+              println(s"canonical = $canonical, origins = ${cp.entries map (_.origin)}")
+              error(s"cannot invalidate: no entry named $path in classpath $classPath")
+              List()
+          }
         }
-        cp.entries find matchesCanonical match {
-          case Some(oldEntry) =>
-            val newEntry = cp.context.newClassPath(dir)
-            platform.updateClassPath(oldEntry, newEntry)
-            informProgress(s"classpath updated to $classPath")
-            reSync(definitions.RootClass, Some(classPath), Some(oldEntry), Some(newEntry), invalidated, failed)
-          case None =>
-            println(s"canonical = $canonical, origins = ${cp.entries map (_.origin)}")
-            error(s"cannot invalidate: no entry named $path in classpath $classPath")
+        val subst = Map(paths flatMap assoc: _*)
+        if (subst.nonEmpty) {
+          platform updateClassPath subst
+          informProgress(s"classpath updated on entries [${subst.keys mkString ","}]")
+          def mkClassPath(elems: Iterable[PlatformClassPath]): PlatformClassPath =
+            if (elems.size == 1) elems.head
+            else new MergedClassPath(elems, classPath.context)
+          val oldEntries = mkClassPath(subst.keys)
+          val newEntries = mkClassPath(subst.values)
+          reSync(definitions.RootClass, Some(classPath), Some(oldEntries), Some(newEntries), invalidated, failed)
         }
     }
     def show(msg: String, syms: collection.Traversable[Symbol]) =
@@ -910,18 +922,16 @@ class Global(var currentSettings: Settings, var reporter: Reporter) extends Symb
     (invalidated.toList, failed.toList)
   }
 
-  type OptClassPath = Option[PlatformClassPath]
-
   /** Re-syncs symbol table with classpath
-   *  @param root      The root symbol to be resynced (a package class)
-   *  @param allEntry  Optionally, the corresponding package in the complete current classPath
-   *  @param oldEntry  Optionally, the corresponding package in the old classPath entry
-   *  @param newEntry  Optionally, the corresponding package in the new classPath entry
+   *  @param root         The root symbol to be resynced (a package class)
+   *  @param allEntries   Optionally, the corresponding package in the complete current classPath
+   *  @param oldEntries   Optionally, the corresponding package in the old classPath entries
+   *  @param newEntries   Optionally, the corresponding package in the new classPath entries
    *  @param invalidated  A listbuffer collecting the invalidated package classes
    *  @param failed       A listbuffer collecting system package classes which could not be invalidated
    * The resyncing strategy is determined by the absence or presence of classes and packages.
-   * If either oldEntry or newEntry contains classes, root is invalidated, provided a corresponding package
-   * exists in allEntry, or otherwise is removed.
+   * If either oldEntries or newEntries contains classes, root is invalidated, provided a corresponding package
+   * exists in allEntries, or otherwise is removed.
    * Otherwise, the action is determined by the following matrix, with columns:
    *
    *      old new all sym   action
@@ -938,14 +948,14 @@ class Global(var currentSettings: Settings, var reporter: Reporter) extends Symb
    *  Note that new <= all and old <= sym, so the matrix above covers all possibilities.
    */
   private def reSync(root: ClassSymbol,
-             allEntry: OptClassPath, oldEntry: OptClassPath, newEntry: OptClassPath,
+             allEntries: OptClassPath, oldEntries: OptClassPath, newEntries: OptClassPath,
              invalidated: mutable.ListBuffer[ClassSymbol], failed: mutable.ListBuffer[ClassSymbol]) {
-    ifDebug(informProgress(s"syncing $root, $oldEntry -> $newEntry"))
+    ifDebug(informProgress(s"syncing $root, $oldEntries -> $newEntries"))
 
     val getName: ClassPath[platform.BinaryRepr] => String = (_.name)
     def hasClasses(cp: OptClassPath) = cp.isDefined && cp.get.classes.nonEmpty
     def invalidateOrRemove(root: ClassSymbol) = {
-      allEntry match {
+      allEntries match {
         case Some(cp) => root setInfo new loaders.PackageLoader(cp)
         case None => root.owner.info.decls unlink root.sourceModule
       }
@@ -955,7 +965,7 @@ class Global(var currentSettings: Settings, var reporter: Reporter) extends Symb
     def subPackage(cp: PlatformClassPath, name: String): OptClassPath =
       cp.packages find (cp1 => getName(cp1) == name)
 
-    val classesFound = hasClasses(oldEntry) || hasClasses(newEntry)
+    val classesFound = hasClasses(oldEntries) || hasClasses(newEntries)
     if (classesFound && !isSystemPackageClass(root)) {
       invalidateOrRemove(root)
     } else {
@@ -963,21 +973,18 @@ class Global(var currentSettings: Settings, var reporter: Reporter) extends Symb
         if (root.isRoot) invalidateOrRemove(definitions.EmptyPackageClass)
         else failed += root
       }
-      (oldEntry, newEntry) match {
+      (oldEntries, newEntries) match {
         case (Some(oldcp) , Some(newcp)) =>
           for (pstr <- packageNames(oldcp) ++ packageNames(newcp)) {
             val pname = newTermName(pstr)
-            var pkg = root.info decl pname
-            if (pkg == NoSymbol) {
+            val pkg = (root.info decl pname) orElse {
               // package was created by external agent, create symbol to track it
               assert(!subPackage(oldcp, pstr).isDefined)
-              pkg = root.newPackage(pname)
-              pkg.setInfo(pkg.moduleClass.tpe)
-              root.info.decls.enter(pkg)
+              loaders.enterPackage(root, pstr, new loaders.PackageLoader(allEntries.get))
             }
             reSync(
                 pkg.moduleClass.asInstanceOf[ClassSymbol],
-                subPackage(allEntry.get, pstr), subPackage(oldcp, pstr), subPackage(newcp, pstr),
+                subPackage(allEntries.get, pstr), subPackage(oldcp, pstr), subPackage(newcp, pstr),
                 invalidated, failed)
           }
         case (Some(oldcp), None) =>
@@ -992,7 +999,7 @@ class Global(var currentSettings: Settings, var reporter: Reporter) extends Symb
   /** Invalidate contents of setting -Yinvalidate */
   def doInvalidation() = settings.Yinvalidate.value match {
     case "" =>
-    case entry => invalidateClassPathEntry(entry)
+    case entry => invalidateClassPathEntries(entry)
   }
 
   // ----------- Runs ---------------------------------------
@@ -1014,7 +1021,7 @@ class Global(var currentSettings: Settings, var reporter: Reporter) extends Symb
    *
    *  @param    sym A class symbol, object symbol, package, or package class.
    */
-  @deprecated("use invalidateClassPathEntry instead")
+  @deprecated("use invalidateClassPathEntries instead")
   def clearOnNextRun(sym: Symbol) = false
     /* To try out clearOnNext run on the scala.tools.nsc project itself
      * replace `false` above with the following code
@@ -1271,7 +1278,7 @@ class Global(var currentSettings: Settings, var reporter: Reporter) extends Symb
     /** Reset all classes contained in current project, as determined by
      *  the clearOnNextRun hook
      */
-    @deprecated("use invalidateClassPathEntry instead")
+    @deprecated("use invalidateClassPathEntries instead")
     def resetProjectClasses(root: Symbol): Unit = try {
       def unlink(sym: Symbol) =
         if (sym != NoSymbol) root.info.decls.unlink(sym)
@@ -1504,6 +1511,7 @@ class Global(var currentSettings: Settings, var reporter: Reporter) extends Symb
     def compileUnits(units: List[CompilationUnit], fromPhase: Phase) {
       try compileUnitsInternal(units, fromPhase)
       catch { case ex =>
+        // ex.printStackTrace(Console.out) // DEBUG for fsc, note that error stacktraces do not print in fsc
         globalError(supplementErrorMessage("uncaught exception during compilation: " + ex.getClass.getName))
         throw ex
       }
