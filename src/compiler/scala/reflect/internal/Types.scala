@@ -83,6 +83,8 @@ trait Types extends api.Types { self: SymbolTable =>
   private final val LogPendingBaseTypesThreshold = 50
   private final val LogVolatileThreshold = 50
 
+  private final val DecreaseLubGlbDepthThreshholds = Array(100, 1000, 2000, 3000, 4000)
+
   /** A don't care value for the depth parameter in lubs/glbs and related operations. */
   private final val AnyDepth = -3
 
@@ -6250,6 +6252,12 @@ trait Types extends api.Types { self: SymbolTable =>
   private val lubResults = new mutable.HashMap[(Int, List[Type]), Type]
   private val glbResults = new mutable.HashMap[(Int, List[Type]), Type]
 
+  def adjustDepth(depth: Int) = {
+    val computedSoFar = lubResults.size + glbResults.size 
+    val idx = DecreaseLubGlbDepthThreshholds lastIndexWhere (computedSoFar > _)
+    depth - (idx + 1)
+  }
+
   def lub(ts: List[Type]): Type = ts match {
     case List() => NothingClass.tpe
     case List(t) => t
@@ -6283,7 +6291,7 @@ trait Types extends api.Types { self: SymbolTable =>
             lubType
           case None =>
             lubResults((depth, ts)) = AnyClass.tpe
-            val res = if (depth < 0) AnyClass.tpe else lub1(ts)
+            val res = if (adjustDepth(depth) < 0) AnyClass.tpe else lub1(ts)
             lubResults((depth, ts)) = res
             res
         }
@@ -6295,7 +6303,7 @@ trait Types extends api.Types { self: SymbolTable =>
       val lubOwner = commonOwner(ts)
       val lubBase = intersectionType(lubParents, lubOwner)
       val lubType =
-        if (phase.erasedTypes || depth == 0) lubBase
+        if (phase.erasedTypes || adjustDepth(depth) <= 0) lubBase
         else {
           val lubRefined  = refinedType(lubParents, lubOwner)
           val lubThisType = lubRefined.typeSymbol.thisType
@@ -6434,7 +6442,7 @@ trait Types extends api.Types { self: SymbolTable =>
             glbType
           case _ =>
             glbResults((depth, ts)) = NothingClass.tpe
-            val res = if (depth < 0) NothingClass.tpe else glb1(ts)
+            val res = if (adjustDepth(depth) < 0) NothingClass.tpe else glb1(ts)
             glbResults((depth, ts)) = res
             res
         }
@@ -6456,7 +6464,7 @@ trait Types extends api.Types { self: SymbolTable =>
         val ts1 = ts flatMap refinedToParents
         val glbBase = intersectionType(ts1, glbOwner)
         val glbType =
-          if (phase.erasedTypes || depth == 0) glbBase
+          if (phase.erasedTypes || adjustDepth(depth) <= 0) glbBase
           else {
             val glbRefined = refinedType(ts1, glbOwner)
             val glbThisType = glbRefined.typeSymbol.thisType
@@ -6574,7 +6582,7 @@ trait Types extends api.Types { self: SymbolTable =>
         }
         else {
           val args = map2(sym.typeParams, argss.transpose) { (tparam, as) =>
-            if (depth == 0) {
+            if (adjustDepth(depth) <= 0) {
               if (tparam.variance == variance) {
                 // Take the intersection of the upper bounds of the type parameters
                 // rather than falling all the way back to "Any", otherwise we end up not
