@@ -4960,7 +4960,8 @@ trait Types extends api.Types { self: SymbolTable =>
    *  the maximum depth `bd` of all types in the base type sequences of these types.
    */
   private def lubDepthAdjust(td: Int, bd: Int): Int =
-    if (bd <= 3) bd
+    if (settings.XfullLubs.value) bd
+    else if (bd <= 3) bd
     else if (bd <= 5) td max (bd - 1)
     else if (bd <= 7) td max (bd - 2)
     else (td - 1) max (bd - 3)
@@ -6296,11 +6297,14 @@ trait Types extends api.Types { self: SymbolTable =>
     case List() => NothingClass.tpe
     case List(t) => t
     case _ =>
+      incCounter(lubCount)
+      val start = startTimer(lubNanos)
       try {
-        lub(ts, lubDepth(ts))
+         lub(ts, lubDepth(ts))
       } finally {
         lubResults.clear()
         glbResults.clear()
+        stopTimer(lubNanos, start)
       }
   }
 
@@ -6416,6 +6420,7 @@ trait Types extends api.Types { self: SymbolTable =>
       indent = indent + "  "
       assert(indent.length <= 100)
     }
+    incCounter(nestedLubCount)
     val res = lub0(ts)
     if (printLubs) {
       indent = indent stripSuffix "  "
@@ -6440,12 +6445,15 @@ trait Types extends api.Types { self: SymbolTable =>
     case List() => AnyClass.tpe
     case List(t) => t
     case ts0 =>
+      incCounter(lubCount)
+      val start = startTimer(lubNanos)
       try {
         glbNorm(ts0, lubDepth(ts0))
       } finally {
         lubResults.clear()
         glbResults.clear()
-      }
+        stopTimer(lubNanos, start)
+     }
   }
 
   private def glb(ts: List[Type], depth: Int): Type = elimSuper(ts) match {
@@ -6559,6 +6567,7 @@ trait Types extends api.Types { self: SymbolTable =>
     }
     // if (settings.debug.value) { println(indent + "glb of " + ts + " at depth "+depth); indent = indent + "  " } //DEBUG
 
+    incCounter(nestedLubCount)
     val res = glb0(ts)
 
     // if (settings.debug.value) { indent = indent.substring(0, indent.length() - 2); log(indent + "glb of " + ts + " is " + res) }//DEBUG
