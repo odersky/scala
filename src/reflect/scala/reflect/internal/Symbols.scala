@@ -539,7 +539,6 @@ trait Symbols extends api.Symbols { self: SymbolTable =>
     def isConcreteClass         = false
     def isImplClass             = false   // the implementation class of a trait
     def isJavaInterface         = false
-    def isModuleClass           = false
     def isNumericValueClass     = false
     def isPrimitiveValueClass   = false
     def isRefinementClass       = false
@@ -900,14 +899,11 @@ trait Symbols extends api.Symbols { self: SymbolTable =>
       if (owner.isTerm) return false
       if (isLocalDummy) return false
 
+      if (isAliasType) return true
       if (isType && isNonClassType) return false
       if (isRefinementClass) return false
       return true
     }
-
-    // [Eugene] is it a good idea to add ``dealias'' to Symbol?
-    /** Expands type aliases */
-    def dealias: Symbol = this
 
     /** The variance of this symbol as an integer */
     final def variance: Int =
@@ -1438,24 +1434,28 @@ trait Symbols extends api.Symbols { self: SymbolTable =>
      */
     def classBound: Type = {
       val tp = refinedType(info.parents, owner)
-      val thistp = tp.typeSymbol.thisType
-      val oldsymbuf = new ListBuffer[Symbol]
-      val newsymbuf = new ListBuffer[Symbol]
-      for (sym <- info.decls) {
-        // todo: what about public references to private symbols?
-        if (sym.isPublic && !sym.isConstructor) {
-          oldsymbuf += sym
-          newsymbuf += (
-            if (sym.isClass)
-              tp.typeSymbol.newAbstractType(sym.name.toTypeName, sym.pos).setInfo(sym.existentialBound)
-            else
-              sym.cloneSymbol(tp.typeSymbol))
+      // SI-4589 refinedType only creates a new refinement class symbol before erasure; afterwards
+      //         the first parent class is returned, to which we must not add members.
+      if (!phase.erasedTypes) {
+        val thistp = tp.typeSymbol.thisType
+        val oldsymbuf = new ListBuffer[Symbol]
+        val newsymbuf = new ListBuffer[Symbol]
+        for (sym <- info.decls) {
+          // todo: what about public references to private symbols?
+          if (sym.isPublic && !sym.isConstructor) {
+            oldsymbuf += sym
+            newsymbuf += (
+              if (sym.isClass)
+                tp.typeSymbol.newAbstractType(sym.name.toTypeName, sym.pos).setInfo(sym.existentialBound)
+              else
+                sym.cloneSymbol(tp.typeSymbol))
+          }
         }
-      }
-      val oldsyms = oldsymbuf.toList
-      val newsyms = newsymbuf.toList
-      for (sym <- newsyms) {
-        addMember(thistp, tp, sym modifyInfo (_ substThisAndSym(this, thistp, oldsyms, newsyms)))
+        val oldsyms = oldsymbuf.toList
+        val newsyms = newsymbuf.toList
+        for (sym <- newsyms) {
+          addMember(thistp, tp, sym modifyInfo (_ substThisAndSym(this, thistp, oldsyms, newsyms)))
+        }
       }
       tp
     }
@@ -2560,7 +2560,6 @@ trait Symbols extends api.Symbols { self: SymbolTable =>
   extends TypeSymbol(initOwner, initPos, initName) {
     type TypeOfClonedSymbol = TypeSymbol
     final override def isAliasType = true
-    final override def dealias = info.typeSymbol.dealias
     override def cloneSymbolImpl(owner: Symbol, newFlags: Long): TypeSymbol =
       owner.newNonClassSymbol(name, pos, newFlags)
   }
