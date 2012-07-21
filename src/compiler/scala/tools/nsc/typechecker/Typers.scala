@@ -1072,7 +1072,10 @@ trait Typers extends Modes with Adaptations with Tags {
           treeCopy.Literal(tree, value)
         case OverloadedType(pre, alts) if !inFunMode(mode) => // (1)
           inferExprAlternative(tree, pt)
-          adapt(tree, mode, pt, original)
+          tree.tpe match {
+            case OverloadedType(_, _) => tree // no progress; give up
+            case _ => adapt(tree, mode, pt, original)
+          }
         case NullaryMethodType(restpe) => // (2)
           adapt(tree setType restpe, mode, pt, original)
         case TypeRef(_, ByNameParamClass, List(arg)) if ((mode & EXPRmode) != 0) => // (2)
@@ -4510,7 +4513,7 @@ trait Typers extends Modes with Adaptations with Tags {
           assert(errorContainer == null, "Cannot set ambiguous error twice for identifier")
           errorContainer = tree
         }
-        
+
         val fingerPrint: Long = name.fingerPrint
 
         var defSym: Symbol = tree.symbol  // the directly found symbol
