@@ -511,8 +511,8 @@ trait Symbols extends api.Symbols { self: SymbolTable =>
     final def newModuleClassSymbol(name: TypeName, pos: Position = NoPosition, newFlags: Long = 0L): ModuleClassSymbol =
       newClassSymbol(name, pos, newFlags).asInstanceOf[ModuleClassSymbol]
 
-    final def newTypeSkolemSymbol(name: TypeName, origin: AnyRef, pos: Position = NoPosition, newFlags: Long = 0L): TypeSkolem =
-      createTypeSkolemSymbol(name, origin, pos, newFlags)
+    final def newTypeSkolemSymbol(name: TypeName, original: Symbol, pos: Position = NoPosition, newFlags: Long = 0L): TypeSkolem =
+      createTypeSkolemSymbol(name, original, pos, newFlags)
 
     /** @param pre   type relative to which alternatives are seen.
      *  for instance:
@@ -580,9 +580,11 @@ trait Symbols extends api.Symbols { self: SymbolTable =>
     /** Create a new existential type skolem with this symbol its owner,
      *  based on the given symbol and origin.
      */
-    def newExistentialSkolem(basis: Symbol, origin: AnyRef): TypeSkolem = {
-      val skolem = newTypeSkolemSymbol(basis.name.toTypeName, origin, basis.pos, (basis.flags | EXISTENTIAL) & ~PARAM)
+    def newExistentialSkolem(basis: Symbol, origin: Tree): TypeSkolem = {
+      val skolem = newTypeSkolemSymbol(basis.name.toTypeName, NoSymbol, basis.pos, (basis.flags | EXISTENTIAL) & ~PARAM)
       skolem setInfo (basis.info cloneInfo skolem)
+      if (!origin.isEmpty) origin.attachments add skolem
+      skolem
     }
 
     // flags set up to maintain TypeSkolem's invariant: origin.isInstanceOf[Symbol] == !hasFlag(EXISTENTIAL)
@@ -1252,8 +1254,8 @@ trait Symbols extends api.Symbols { self: SymbolTable =>
     protected def createAliasTypeSymbol(name: TypeName, pos: Position, newFlags: Long): AliasTypeSymbol =
       new AliasTypeSymbol(this, pos, name) initFlags newFlags
 
-    protected def createTypeSkolemSymbol(name: TypeName, origin: AnyRef, pos: Position, newFlags: Long): TypeSkolem =
-      new TypeSkolem(this, pos, name, origin) initFlags newFlags
+    protected def createTypeSkolemSymbol(name: TypeName, original: Symbol, pos: Position, newFlags: Long): TypeSkolem =
+      new TypeSkolem(this, pos, name, original) initFlags newFlags
 
     protected def createClassSymbol(name: TypeName, pos: Position, newFlags: Long): ClassSymbol =
       new ClassSymbol(this, pos, name) initFlags newFlags
@@ -2254,10 +2256,6 @@ trait Symbols extends api.Symbols { self: SymbolTable =>
      *  its corresponding type parameter, otherwise this */
     def deSkolemize: Symbol = this
 
-    /** If this symbol is an existential skolem the location (a Tree or null)
-     *  where it was unpacked. Resulttype is AnyRef because trees are not visible here. */
-    def unpackLocation: AnyRef = null
-
     /** Remove private modifier from symbol `sym`s definition. If `sym` is a
      *  is not a constructor nor a static module rename it by expanding its name to avoid name clashes
      *  @param base  the fully qualified name of this class will be appended if name expansion is needed
@@ -2936,18 +2934,10 @@ trait Symbols extends api.Symbols { self: SymbolTable =>
 
   /** A class for type parameters viewed from inside their scopes
    *
-   *  @param origin  Can be either a tree, or a symbol, or null.
-   *  If skolem got created from newTypeSkolem (called in Namers), origin denotes
-   *  the type parameter from which the skolem was created. If it got created from
-   *  skolemizeExistential, origin is either null or a Tree. If it is a Tree, it indicates
-   *  where the skolem was introduced (this is important for knowing when to pack it
-   *  again into ab Existential). origin is `null` only in skolemizeExistentials called
-   *  from <:< or isAsSpecific, because here its value does not matter.
-   *  I believe the following invariant holds:
-   *
-   *     origin.isInstanceOf[Symbol] == !hasFlag(EXISTENTIAL)
+   *  @param original  If skolem got created from newTypeSkolem (called in Namers), original denotes
+   *  the type parameter from which the skolem was created. In all other cases it is NoSymbol.
    */
-  class TypeSkolem protected[Symbols] (initOwner: Symbol, initPos: Position, initName: TypeName, origin: AnyRef)
+  class TypeSkolem protected[Symbols] (initOwner: Symbol, initPos: Position, initName: TypeName, val original: Symbol)
   extends TypeSymbol(initOwner, initPos, initName) {
     type TypeOfClonedSymbol = TypeSkolem
     /** The skolemization level in place when the skolem was constructed */
@@ -2966,19 +2956,16 @@ trait Symbols extends api.Symbols { self: SymbolTable =>
     override def existentialBound = if (isAbstractType) this.info else super.existentialBound
 
     /** If typeskolem comes from a type parameter, that parameter, otherwise skolem itself */
-    override def deSkolemize = origin match {
+    override def deSkolemize = original match {
       case s: Symbol => s
       case _ => this
     }
-
-    /** If type skolem comes from an existential, the tree where it was created */
-    override def unpackLocation = origin
 
     //@M! (not deSkolemize.typeParams!!), also can't leave superclass definition: use info, not rawInfo
     override def typeParams = info.typeParams
 
     override def cloneSymbolImpl(owner: Symbol, newFlags: Long): TypeSkolem =
-      owner.newTypeSkolemSymbol(name, origin, pos, newFlags)
+      owner.newTypeSkolemSymbol(name, original, pos, newFlags)
 
     override def nameString: String =
       if (settings.debug.value) (super.nameString + "&" + level)

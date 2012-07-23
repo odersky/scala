@@ -62,8 +62,8 @@ trait SynchronizedSymbols extends internal.Symbols { self: SymbolTable =>
     override protected def createAliasTypeSymbol(name: TypeName, pos: Position, newFlags: Long): AliasTypeSymbol =
       new AliasTypeSymbol(this, pos, name) with SynchronizedTypeSymbol initFlags newFlags
 
-    override protected def createTypeSkolemSymbol(name: TypeName, origin: AnyRef, pos: Position, newFlags: Long): TypeSkolem =
-      new TypeSkolem(this, pos, name, origin) with SynchronizedTypeSymbol initFlags newFlags
+    override protected def createTypeSkolemSymbol(name: TypeName, original: Symbol, pos: Position, newFlags: Long): TypeSkolem =
+      new TypeSkolem(this, pos, name, original) with SynchronizedTypeSymbol initFlags newFlags
 
     override protected def createClassSymbol(name: TypeName, pos: Position, newFlags: Long): ClassSymbol =
       new ClassSymbol(this, pos, name) with SynchronizedClassSymbol initFlags newFlags

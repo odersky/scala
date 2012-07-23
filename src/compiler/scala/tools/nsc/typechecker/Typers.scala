@@ -3150,7 +3150,7 @@ trait Typers extends Modes with Adaptations with Tags {
         val pattp = typer1.infer.inferTypedPattern(tree, unappFormal, arg.tpe, canRemedy = uncheckedTypeExtractor.nonEmpty)
 
         // turn any unresolved type variables in freevars into existential skolems
-        val skolems = freeVars map (fv => unapplyContext.owner.newExistentialSkolem(fv, fv))
+        val skolems = freeVars map (fv => unapplyContext.owner.newExistentialSkolem(fv, tree))
         arg.tpe = pattp.substSym(freeVars, skolems)
         argDummy setInfo arg.tpe
       }
@@ -3543,7 +3543,7 @@ trait Typers extends Modes with Adaptations with Tags {
     /** convert local symbols and skolems to existentials */
     def packedType(tree: Tree, owner: Symbol): Type = {
       def defines(tree: Tree, sym: Symbol) =
-        sym.isExistentialSkolem && sym.unpackLocation == tree ||
+        sym.isExistentialSkolem && (tree.attachments.all contains sym) ||
         tree.isDef && tree.symbol == sym
       def isVisibleParameter(sym: Symbol) =
         sym.isParameter && (sym.owner == owner) && (sym.isType || !owner.isAnonymousFunction)

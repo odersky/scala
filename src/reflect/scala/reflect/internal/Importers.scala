@@ -78,12 +78,8 @@ trait Importers { self: SymbolTable =>
           case x: from.TermSymbol =>
             linkReferenced(myowner.newValue(myname, mypos, myflags), x, importSymbol)
           case x: from.TypeSkolem =>
-            val origin = x.unpackLocation match {
-              case null           => null
-              case y: from.Tree   => importTree(y)
-              case y: from.Symbol => importSymbol(y)
-            }
-            myowner.newTypeSkolemSymbol(myname.toTypeName, origin, mypos, myflags)
+            val myoriginal = importSymbol(x.original)
+            myowner.newTypeSkolemSymbol(myname.toTypeName, myoriginal, mypos, myflags)
           case x: from.ModuleClassSymbol =>
             val mysym = myowner.newModuleClass(myname.toTypeName, mypos, myflags)
             symMap(x) = mysym

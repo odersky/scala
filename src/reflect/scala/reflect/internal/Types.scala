@@ -238,7 +238,7 @@ trait Types extends api.Types { self: SymbolTable =>
     override def typeArgs = underlying.typeArgs
     override def notNull = maybeRewrap(underlying.notNull)
     override def instantiateTypeParams(formals: List[Symbol], actuals: List[Type]) = underlying.instantiateTypeParams(formals, actuals)
-    override def skolemizeExistential(owner: Symbol, origin: AnyRef) = underlying.skolemizeExistential(owner, origin)
+    override def skolemizeExistential(owner: Symbol, origin: Tree) = underlying.skolemizeExistential(owner, origin)
     override def normalize = maybeRewrap(underlying.normalize)
     override def dealias = maybeRewrap(underlying.dealias)
     override def cloneInfo(owner: Symbol) = maybeRewrap(underlying.cloneInfo(owner))
@@ -549,12 +549,12 @@ trait Types extends api.Types { self: SymbolTable =>
      *  @param  owner    The owner of the created type skolems
      *  @param  origin   The tree whose type was an existential for which the skolem was created.
      */
-    def skolemizeExistential(owner: Symbol, origin: AnyRef): Type = this
+    def skolemizeExistential(owner: Symbol, origin: Tree): Type = this
 
     /** A simple version of skolemizeExistential for situations where
      *  owner or unpack location do not matter (typically used in subtype tests)
      */
-    def skolemizeExistential: Type = skolemizeExistential(NoSymbol, null)
+    def skolemizeExistential: Type = skolemizeExistential(NoSymbol, EmptyTree)
 
     /** Reduce to beta eta-long normal form.
      *  Expands type aliases and converts higher-kinded TypeRefs to PolyTypes.
@@ -2700,7 +2700,7 @@ trait Types extends api.Types { self: SymbolTable =>
     override def baseTypeSeq = underlying.baseTypeSeq map maybeRewrap
     override def isHigherKinded = false
 
-    override def skolemizeExistential(owner: Symbol, origin: AnyRef) =
+    override def skolemizeExistential(owner: Symbol, origin: Tree) =
       deriveType(quantified, tparam => (owner orElse tparam.owner).newExistentialSkolem(tparam, origin))(underlying)
 
     private def wildcardArgsString(qset: Set[Symbol], args: List[Type]): List[String] = args map {
@@ -2727,6 +2727,7 @@ trait Types extends api.Types { self: SymbolTable =>
             tpe.typeSymbol.isRefinementClass && (tpe.parents exists isQuantified)
           }
           val (wildcardArgs, otherArgs) = args partition (arg => qset contains arg.typeSymbol)
+          args.nonEmpty &&
           wildcardArgs.distinct == wildcardArgs &&
           !(otherArgs exists (arg => isQuantified(arg))) &&
           !(wildcardArgs exists (arg => isQuantified(arg.typeSymbol.info.bounds))) &&
