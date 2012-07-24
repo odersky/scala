@@ -268,7 +268,7 @@ abstract class AddInterfaces extends InfoTransform { self: Erasure =>
       val oldSyms = vparamss.flatten.map(_.symbol)
       val newSyms = impl.info.paramss.flatten
       assert(oldSyms.length == newSyms.length, (oldSyms, impl, impl.info))
-      tree.substituteSymbols(oldSyms, newSyms)
+      tree.substituteSymbols(oldSyms, newSyms, transformLocalSymbols = false)
     }
     new ChangeOwnerAndReturnTraverser(newTree.symbol, impl)(newTree setSymbol impl)
   }

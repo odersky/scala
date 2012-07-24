@@ -292,29 +292,24 @@ trait Trees extends reflect.internal.Trees { self: Global =>
     }
 
     class MarkLocals extends self.Traverser {
-      def markLocal(tree: Tree) {
-        if (tree.symbol != null && tree.symbol != NoSymbol) {
-          val sym = tree.symbol
-          registerLocal(sym)
-          registerLocal(sym.sourceModule)
-          registerLocal(sym.moduleClass)
-          registerLocal(sym.companionClass)
-          registerLocal(sym.companionModule)
-          sym match {
-            case sym: TermSymbol => registerLocal(sym.referenced)
-            case _ => ;
-          }
-        }
-      }
-
       override def traverse(tree: Tree) = {
         tree match {
          case _: DefTree | Function(_, _) | Template(_, _, _) =>
-           markLocal(tree)
+           if (tree.symbol != null && tree.symbol != NoSymbol) {
+             val sym = tree.symbol
+             registerLocal(sym)
+             registerLocal(sym.sourceModule)
+             registerLocal(sym.moduleClass)
+             registerLocal(sym.companionClass)
+             registerLocal(sym.companionModule)
+             sym match {
+               case sym: TermSymbol => registerLocal(sym.referenced)
+               case _ => 
+             }
+           } 
          case _ =>
            tree
         }
-
         super.traverse(tree)
       }
     }

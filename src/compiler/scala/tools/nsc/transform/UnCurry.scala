@@ -35,8 +35,8 @@ import language.postfixOps
  *  - convert non-local returns to throws with enclosing try statements.
  *  - convert try-catch expressions in contexts where there might be values on the stack to
  *      a local method and a call to it (since an exception empties the evaluation stack):
- *      
- *      meth(x_1,..., try { x_i } catch { ..}, .. x_b0) ==> 
+ *
+ *      meth(x_1,..., try { x_i } catch { ..}, .. x_b0) ==>
  *        {
  *          def liftedTry$1 = try { x_i } catch { .. }
  *          meth(x_1, .., liftedTry$1(), .. )
@@ -332,7 +332,7 @@ abstract class UnCurry extends InfoTransform
         val newSyms = newParams.toList ++ (oldSyms0 map (_.cloneSymbol))
         // println("duping "+ oldSyms +" --> "+ (newSyms map (_.ownerChain)))
 
-        val substLabels = new TreeSymSubstituter(oldSyms, newSyms)
+        val substLabels = new TreeSymSubstituter(oldSyms, newSyms, transformLocalSymbols = false)
 
         substLabels(duped)
       }
@@ -348,7 +348,7 @@ abstract class UnCurry extends InfoTransform
         val params@List(x, default) = methSym newSyntheticValueParams methFormals
         methSym setInfoAndEnter polyType(List(A1, B1), MethodType(params, B1.tpe))
 
-        val substParam = new TreeSymSubstituter(fun.vparams map (_.symbol), List(x))
+        val substParam = new TreeSymSubstituter(fun.vparams map (_.symbol), List(x), transformLocalSymbols = false)
         val body = localTyper.typedPos(fun.pos) { import CODE._
           def defaultAction(scrut: Tree) = REF(default) APPLY (REF(x))
 
@@ -377,7 +377,7 @@ abstract class UnCurry extends InfoTransform
         val params  = methSym newSyntheticValueParams formals
         methSym setInfoAndEnter MethodType(params, BooleanClass.tpe)
 
-        val substParam = new TreeSymSubstituter(fun.vparams map (_.symbol), params)
+        val substParam = new TreeSymSubstituter(fun.vparams map (_.symbol), params, transformLocalSymbols = false)
         def doSubst(x: Tree) = substParam(resetLocalAttrsKeepLabels(x)) // see pos/t1761 for why `resetLocalAttrs`, but must keep label symbols around
 
         val body = bodyForIDA match {
@@ -641,7 +641,7 @@ abstract class UnCurry extends InfoTransform
           case ret @ Return(_) if (isNonLocalReturn(ret)) =>
             withNeedLift(true) { super.transform(ret) }
 
-          case Try(_, Nil, _) => 
+          case Try(_, Nil, _) =>
             // try-finally does not need lifting: lifting is needed only for try-catch
             // expressions that are evaluated in a context where the stack might not be empty.
             // `finally` does not attempt to continue evaluation after an exception, so the fact

@@ -90,17 +90,17 @@ trait Trees extends base.Trees { self: Universe =>
     /** Substitute symbols in `to` for corresponding occurrences of references to
      *  symbols `from` in this type.
      */
-    def substituteSymbols(from: List[Symbol], to: List[Symbol]): Tree
+    def substituteSymbols(from: List[Symbol], to: List[Symbol], transformLocalSymbols: Boolean): Tree
 
     /** Substitute types in `to` for corresponding occurrences of references to
      *  symbols `from` in this tree.
      */
-    def substituteTypes(from: List[Symbol], to: List[Type]): Tree
+    def substituteTypes(from: List[Symbol], to: List[Type], transformLocalSymbols: Boolean): Tree
 
     /** Substitute given tree `to` for occurrences of nodes that represent
      *  `C.this`, where `C` referes to the given class `clazz`.
      */
-    def substituteThis(clazz: Symbol, to: Tree): Tree
+    def substituteThis(clazz: Symbol, to: Tree, transformLocalSymbols: Boolean): Tree
 
     /** Make a copy of this tree, keeping all attributes,
      *  except that all positions are focused (so nothing

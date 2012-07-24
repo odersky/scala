@@ -2727,6 +2727,7 @@ trait Types extends api.Types { self: SymbolTable =>
             tpe.typeSymbol.isRefinementClass && (tpe.parents exists isQuantified)
           }
           val (wildcardArgs, otherArgs) = args partition (arg => qset contains arg.typeSymbol)
+          args.nonEmpty &&
           wildcardArgs.distinct == wildcardArgs &&
           !(otherArgs exists (arg => isQuantified(arg))) &&
           !(wildcardArgs exists (arg => isQuantified(arg.typeSymbol.info.bounds))) &&

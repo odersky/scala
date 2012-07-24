@@ -60,10 +60,10 @@ trait Trees extends api.Trees { self: SymbolTable =>
       case _                 => false
     }
 
-    private[scala] def copyAttrs(tree: Tree): this.type = {
-      rawatt = tree.rawatt
-      tpe = tree.tpe
-      if (hasSymbol) symbol = tree.symbol
+    private[scala] def copyAttrs(from: Tree): this.type = {
+      rawatt = from.rawatt
+      tpe = from.tpe
+      if (hasSymbol) symbol = from.symbol
       this
     }
 
@@ -150,14 +150,14 @@ trait Trees extends api.Trees { self: SymbolTable =>
       s.toList
     }
 
-    override def substituteSymbols(from: List[Symbol], to: List[Symbol]): Tree =
-      new TreeSymSubstituter(from, to)(this)
+    override def substituteSymbols(from: List[Symbol], to: List[Symbol], transformLocalSymbols: Boolean): Tree =
+      new TreeSymSubstituter(from, to, transformLocalSymbols)(this)
 
-    override def substituteTypes(from: List[Symbol], to: List[Type]): Tree =
+    override def substituteTypes(from: List[Symbol], to: List[Type], transformLocalSymbols: Boolean): Tree =
       new TreeTypeSubstituter(from, to)(this)
 
-    override def substituteThis(clazz: Symbol, to: Tree): Tree =
-      new ThisSubstituter(clazz, to) transform this
+    override def substituteThis(clazz: Symbol, to: Tree, transformLocalSymbols: Boolean): Tree =
+      new ThisSubstituter(clazz, to, transformLocalSymbols) transform this
 
     def hasSymbolWhich(f: Symbol => Boolean) =
       hasSymbol && symbol != null && f(symbol)
@@ -1273,22 +1273,24 @@ trait Trees extends api.Trees { self: SymbolTable =>
   }
 
   class ChangeOwnerTraverser(val oldowner: Symbol, val newowner: Symbol) extends Traverser {
-    def changeOwner(tree: Tree) = tree match {
-      case Return(expr) =>
-        if (tree.symbol == oldowner) {
-          // SI-5612
-          if (newowner hasTransOwner oldowner)
-            log("NOT changing owner of %s because %s is nested in %s".format(tree, newowner, oldowner))
-          else {
-            log("changing owner of %s: %s => %s".format(tree, oldowner, newowner))
-            tree.symbol = newowner
+    def changeOwner(sym: Symbol): Unit =
+      if (sym != NoSymbol && sym.owner == oldowner) sym.owner = newowner
+    def changeOwner(tree: Tree): Unit = {
+      tree match {
+        case Return(expr) =>
+          if (tree.symbol == oldowner) {
+            // SI-5612
+            if (newowner hasTransOwner oldowner)
+              log("NOT changing owner of %s because %s is nested in %s".format(tree, newowner, oldowner))
+            else {
+              log("changing owner of %s: %s => %s".format(tree, oldowner, newowner))
+              tree.symbol = newowner
+            }
           }
-        }
-      case _: DefTree | _: Function =>
-        if (tree.symbol != NoSymbol && tree.symbol.owner == oldowner) {
-          tree.symbol.owner = newowner
-        }
-      case _ =>
+        case _: DefTree | _: Function =>
+          changeOwner(tree.symbol)
+        case _ =>
+      }
     }
     override def traverse(tree: Tree) {
       changeOwner(tree)
@@ -1317,7 +1319,7 @@ trait Trees extends api.Trees { self: SymbolTable =>
         def subst(from: List[Symbol], to: List[Tree]): Tree =
           if (from.isEmpty) tree
           else if (tree.symbol == from.head) to.head.shallowDuplicate // TODO: does it ever make sense *not* to perform a shallowDuplicate on `to.head`?
-          else subst(from.tail, to.tail);
+          else subst(from.tail, to.tail)
         subst(from, to)
       case _ =>
         super.transform(tree)
@@ -1325,12 +1327,32 @@ trait Trees extends api.Trees { self: SymbolTable =>
     override def toString = substituterString("Symbol", "Tree", from, to)
   }
 
+  /** The canonical way to transform all tree attributes with a given
+   *  function typeMap: Type => Type
+   */
+  trait AttrTransform {
+    val typeMap: Type => Type
+    val transformLocalSymbols: Boolean
+    def transformAttrs(tree: Tree) = {
+      if (tree.tpe ne null)
+        tree.tpe = typeMap(tree.tpe)
+      if (transformLocalSymbols) {
+        tree match {
+          case _: DefTree | _: Function =>
+            if (tree.symbol ne null) tree.symbol modifyInfo typeMap
+          case _ =>
+        }
+      }
+    }
+  }
+
   /** Substitute clazz.this with `to`. `to` must be an attributed tree.
    */
-  class ThisSubstituter(clazz: Symbol, to: => Tree) extends Transformer {
+  class ThisSubstituter(clazz: Symbol, to: => Tree, val transformLocalSymbols: Boolean) extends Transformer with AttrTransform {
     val newtpe = to.tpe
+    val typeMap: Type => Type = (_ substThis(clazz, newtpe))
     override def transform(tree: Tree) = {
-      if (tree.tpe ne null) tree.tpe = tree.tpe.substThis(clazz, newtpe)
+      transformAttrs(tree)
       tree match {
         case This(_) if tree.symbol == clazz => to
         case _ => super.transform(tree)
@@ -1338,43 +1360,19 @@ trait Trees extends api.Trees { self: SymbolTable =>
     }
   }
 
-  class TypeMapTreeSubstituter(val typeMap: TypeMap) extends Traverser {
-    override def traverse(tree: Tree) {
-      if (tree.tpe ne null)
-        tree.tpe = typeMap(tree.tpe)
-      if (tree.isDef)
-        tree.symbol modifyInfo typeMap
-
-      super.traverse(tree)
-    }
-    override def apply[T <: Tree](tree: T): T = super.apply(tree.duplicate)
-  }
-
-  class TreeTypeSubstituter(val from: List[Symbol], val to: List[Type]) extends TypeMapTreeSubstituter(new SubstTypeMap(from, to)) {
-    def isEmpty = from.isEmpty && to.isEmpty
-    override def toString() = "TreeTypeSubstituter("+from+","+to+")"
-  }
-
-  lazy val EmptyTreeTypeSubstituter = new TreeTypeSubstituter(List(), List())
-
-  class TreeSymSubstTraverser(val from: List[Symbol], val to: List[Symbol]) extends TypeMapTreeSubstituter(new SubstSymMap(from, to)) {
-    override def toString() = "TreeSymSubstTraverser/" + substituterString("Symbol", "Symbol", from, to)
-  }
-
   /** Substitute symbols in `from` with symbols in `to`. Returns a new
    *  tree using the new symbols and whose Ident and Select nodes are
    *  name-consistent with the new symbols.
    */
-  class TreeSymSubstituter(from: List[Symbol], to: List[Symbol]) extends Transformer {
-    val symSubst = new SubstSymMap(from, to)
+  class TreeSymSubstituter(from: List[Symbol], to: List[Symbol], val transformLocalSymbols: Boolean) extends Transformer with AttrTransform {
+    val typeMap = new SubstSymMap(from, to)
     override def transform(tree: Tree): Tree = {
       def subst(from: List[Symbol], to: List[Symbol]) {
         if (!from.isEmpty)
           if (tree.symbol == from.head) tree setSymbol to.head
           else subst(from.tail, to.tail)
       }
-
-      if (tree.tpe ne null) tree.tpe = symSubst(tree.tpe)
+      transformAttrs(tree)
       if (tree.hasSymbol) {
         subst(from, to)
         tree match {
@@ -1392,6 +1390,25 @@ trait Trees extends api.Trees { self: SymbolTable =>
     override def toString() = "TreeSymSubstituter/" + substituterString("Symbol", "Symbol", from, to)
   }
 
+  class TypeMapTreeSubstituter(val typeMap: TypeMap) extends Traverser with AttrTransform {
+    val transformLocalSymbols = true
+    override def traverse(tree: Tree) {
+      transformAttrs(tree)
+      super.traverse(tree)
+    }
+    override def apply[T <: Tree](tree: T): T = super.apply(tree.duplicate) // todo: verify whether tree duplication is needed here
+  }
+
+  class TreeTypeSubstituter(val from: List[Symbol], val to: List[Type]) extends TypeMapTreeSubstituter(new SubstTypeMap(from, to)) {
+    def isEmpty = from.isEmpty && to.isEmpty
+    override def toString() = "TreeTypeSubstituter("+from+","+to+")"
+  }
+
+  lazy val EmptyTreeTypeSubstituter = new TreeTypeSubstituter(List(), List())
+
+  class TreeSymSubstTraverser(val from: List[Symbol], val to: List[Symbol]) extends TypeMapTreeSubstituter(new SubstSymMap(from, to)) {
+    override def toString() = "TreeSymSubstTraverser/" + substituterString("Symbol", "Symbol", from, to)
+  }
 
   class ForeachTreeTraverser(f: Tree => Unit) extends Traverser {
     override def traverse(t: Tree) {

@@ -46,13 +46,13 @@ abstract class ExplicitOuter extends InfoTransform
   private def haveSameOuter(parent: Type, clazz: Symbol) = parent match {
     case TypeRef(pre, sym, _)   =>
       val owner = clazz.owner
-      
+
       //println(s"have same outer $parent $clazz $sym ${sym.owner} $owner $pre")
 
       sym.isClass && owner.isClass &&
-      (owner isSubClass sym.owner) && 
+      (owner isSubClass sym.owner) &&
       owner.thisType =:= pre
-       
+
     case _                      => false
   }
 
@@ -388,7 +388,7 @@ abstract class ExplicitOuter extends InfoTransform
         method setInfo new MethodType(params, BooleanClass.tpe)
 
         localTyper typed {
-          DEF(method) === guard.changeOwner(currentOwner -> method).substituteSymbols(vs, params)
+          DEF(method) === guard.changeOwner(currentOwner -> method).substituteSymbols(vs, params, transformLocalSymbols = false)
         }
       }
 

@@ -257,7 +257,7 @@ trait AnnotationInfos extends api.AnnotationInfos { self: SymbolTable =>
 
     /** Change all ident's with Symbol "from" to instead use symbol "to" */
     def substIdentSyms(from: Symbol, to: Symbol) =
-      AnnotationInfo(atp, args map (_ substituteSymbols (List(from), List(to))), assocs) setPos pos
+      AnnotationInfo(atp, args map (_ substituteSymbols (List(from), List(to), transformLocalSymbols = false)), assocs) setPos pos
 
     def stringArg(index: Int) = constantAtIndex(index) map (_.stringValue)
     def intArg(index: Int)    = constantAtIndex(index) map (_.intValue)

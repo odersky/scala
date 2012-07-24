@@ -3402,7 +3402,7 @@ trait Typers extends Modes with Adaptations with Tags {
             (typed(func, mode, funcType): @unchecked) match {
               case t @ Function(List(arg), rhs) =>
                 val subs =
-                  new TreeSymSubstituter(List(arg.symbol),List(selfsym))
+                  new TreeSymSubstituter(List(arg.symbol), List(selfsym), transformLocalSymbols = false)
                 subs(rhs)
             }
           }

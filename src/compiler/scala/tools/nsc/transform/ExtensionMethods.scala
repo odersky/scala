@@ -78,13 +78,13 @@ abstract class ExtensionMethods extends Transform with TypingTransformers {
   }
 
   /** This method removes the `$this` argument from the parameter list a method.
-   *  
+   *
    *  A method may be a `PolyType`, in which case we tear out the `$this` and the class
    *  type params from its nested `MethodType`.
    *  It may be a `MethodType`, either with a curried parameter list in which the first argument
    *  is a `$this` - we just return the rest of the list.
    *  This means that the corresponding symbol was generated during `extmethods`.
-   *  
+   *
    *  It may also be a `MethodType` in which the `$this` does not appear in a curried parameter list.
    *  The curried lists disappear during `uncurry`, and the methods may be duplicated afterwards,
    *  for instance, during `specialize`.
@@ -153,10 +153,10 @@ abstract class ExtensionMethods extends Transform with TypingTransformers {
           val GenPolyType(extensionTpeParams, extensionMono) = extensionMeth.info
           val origTpeParams = (tparams map (_.symbol)) ::: currentOwner.typeParams
           val extensionBody = rhs
-              .substituteSymbols(origTpeParams, extensionTpeParams)
-              .substituteSymbols(vparamss.flatten map (_.symbol), allParams(extensionMono).tail)
-              .substituteThis(currentOwner, thisParamRef)
-              .changeOwner((origMeth, extensionMeth))
+              .substituteSymbols(origTpeParams, extensionTpeParams, transformLocalSymbols = true)
+              .substituteSymbols(vparamss.flatten map (_.symbol), allParams(extensionMono).tail, transformLocalSymbols = true)
+              .substituteThis(currentOwner, thisParamRef, transformLocalSymbols = true)
+              .changeOwner(origMeth -> extensionMeth)
           extensionDefs(companion) += atPos(tree.pos) { DefDef(extensionMeth, extensionBody) }
           val extensionCallPrefix = Apply(
               gen.mkTypeApply(gen.mkAttributedRef(companion), extensionMeth, origTpeParams map (_.tpeHK)),

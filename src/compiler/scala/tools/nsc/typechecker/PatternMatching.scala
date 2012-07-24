@@ -3181,7 +3181,7 @@ trait PatternMatching extends Transform with TypingTransformers with ast.TreeDSL
                 case o => o
               }
               // need to replace `defaultSym` as well -- it's used in `defaultBody` (see `jumpToDefault` above)
-              val unifiedBody = guardedBody.substituteSymbols(defaultSym :: binders, binder :: binders.map(_ => binder))
+              val unifiedBody = guardedBody.substituteSymbols(defaultSym :: binders, binder :: binders.map(_ => binder), transformLocalSymbols = false)
               (Bind(binder, origPatWithoutBind), unifiedBody)
             }
 

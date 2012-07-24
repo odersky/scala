@@ -319,7 +319,7 @@ abstract class ToolBoxFactory[U <: JavaUniverse](val u: U) { factorySelf =>
 
       if (compiler.settings.verbose.value) println("substituting "+ctree+", expectedType = "+expectedType)
       val cfreeTypes: Map[compiler.FreeTypeSymbol, compiler.Type] = freeTypes map { case (k, v) => (importer.importSymbol(k).asInstanceOf[compiler.FreeTypeSymbol], importer.importType(v)) }
-      ctree = ctree.substituteTypes(cfreeTypes.keys.toList, cfreeTypes.values.toList)
+      ctree = ctree.substituteTypes(cfreeTypes.keys.toList, cfreeTypes.values.toList, transformLocalSymbols = false)
       cexpectedType = cexpectedType.substituteTypes(cfreeTypes.keys.toList, cfreeTypes.values.toList)
 
       if (compiler.settings.verbose.value) println("typing "+ctree+", expectedType = "+expectedType)
@@ -366,7 +366,7 @@ abstract class ToolBoxFactory[U <: JavaUniverse](val u: U) { factorySelf =>
 
       if (compiler.settings.verbose.value) println("substituting "+ctree)
       val cfreeTypes: Map[compiler.FreeTypeSymbol, compiler.Type] = freeTypes map { case (k, v) => (importer.importSymbol(k).asInstanceOf[compiler.FreeTypeSymbol], importer.importType(v)) }
-      ctree = ctree.substituteTypes(cfreeTypes.keys.toList, cfreeTypes.values.toList)
+      ctree = ctree.substituteTypes(cfreeTypes.keys.toList, cfreeTypes.values.toList, transformLocalSymbols = false)
 
       if (compiler.settings.verbose.value) println("running "+ctree)
       compiler.runExpr(ctree)

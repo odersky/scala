@@ -288,7 +288,7 @@ abstract class SelectiveCPSTransform extends PluginComponent with
 
               def applyTrivial(ctxValSym: Symbol, body: Tree) = {
 
-                val body1 = (new TreeSymSubstituter(List(vd.symbol), List(ctxValSym)))(body)
+                val body1 = (new TreeSymSubstituter(List(vd.symbol), List(ctxValSym), transformLocalSymbols = false))(body)
 
                 val body2 = localTyper.typed(atPos(vd.symbol.pos) { body1 })
 
@@ -303,7 +303,7 @@ abstract class SelectiveCPSTransform extends PluginComponent with
 
               def applyCombinatorFun(ctxR: Tree, body: Tree) = {
                 val arg = currentOwner.newValueParameter(name, ctxR.pos).setInfo(tpe)
-                val body1 = (new TreeSymSubstituter(List(vd.symbol), List(arg)))(body)
+                val body1 = (new TreeSymSubstituter(List(vd.symbol), List(arg), transformLocalSymbols = false))(body)
                 val fun = localTyper.typed(atPos(vd.symbol.pos) { Function(List(ValDef(arg)), body1) }) // types body as well
                 arg.owner = fun.symbol
                 body1.changeOwner(currentOwner -> fun.symbol)
