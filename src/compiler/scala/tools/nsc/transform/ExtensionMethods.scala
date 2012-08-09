@@ -1,5 +1,5 @@
 /* NSC -- new Scala compiler
- * Copyright 2005-2011 LAMP/EPFL
+ * Copyright 2005-2012 LAMP/EPFL
  * @author Martin Odersky
  */
 package scala.tools.nsc
@@ -27,9 +27,6 @@ abstract class ExtensionMethods extends Transform with TypingTransformers {
 
   /** the following two members override abstract members in Transform */
   val phaseName: String = "extmethods"
-
-  /** The following flags may be set by this phase: */
-  override def phaseNewFlags: Long = notPRIVATE
 
   def newTransformer(unit: CompilationUnit): Transformer =
     new Extender(unit)
