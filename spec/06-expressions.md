@@ -1445,13 +1445,9 @@ For every member $m$ in $\mathscr{B}$ one determines whether it is applicable
 to expressions ($e_1 , \ldots , e_m$) of types $S_1, \ldots , S_m$.
 
 It is an error if none of the members in $\mathscr{B}$ is applicable. If there is one
-single applicable alternative, that alternative is chosen. Otherwise, let $\mathscr{CC}$
-be the set of applicable alternatives which don't employ any default argument
-in the application to $e_1 , \ldots , e_m$.
-
-It is again an error if $\mathscr{CC}$ is empty.
+single applicable alternative, that alternative is chosen.
 Otherwise, one chooses the _most specific_ alternative among the alternatives
-in $\mathscr{CC}$, according to the following definition of being "as specific as", and
+in $\mathscr{B}$, according to the following definition of being "as specific as", and
 "more specific than":
 
 <!--
@@ -1498,8 +1494,8 @@ An alternative $A$ is _more specific_ than an alternative $B$ if
 the relative weight of $A$ over $B$ is greater than the relative
 weight of $B$ over $A$.
 
-It is an error if there is no alternative in $\mathscr{CC}$ which is more
-specific than all other alternatives in $\mathscr{CC}$.
+If there is an alternative in $\mathscr{B}$ which is more
+specific than all other alternatives in $\mathscr{B}$, that alternative is chosen.
 
 Assume next that $e$ appears as a function in a type application, as
 in `$e$[$\mathit{targs}\,$]`. Then all alternatives in
