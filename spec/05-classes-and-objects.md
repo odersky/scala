@@ -341,7 +341,9 @@ $M'$:
       in a base class of both the classes containing $M$ and $M'$
 - If $M'$ is [incomplete](#modifiers) in $C$ then $M$ must be
   labeled `abstract override`.
-- If $M$ and $M'$ are both concrete value definitions, then either none
+- If $M$ is an object definition and $M'$ is a concrete value definition,
+  then $M'$ must be marked `lazy`.
+  If $M$ and $M'$ are both value definitions (but not objects), then either none
   of them is marked `lazy` or both must be marked `lazy`.
 
 - A stable member can only be overridden by a stable member.
